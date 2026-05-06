@@ -1,5 +1,6 @@
 #include "AlphaGraphic/core/Framebuffer.h"
 
+#include <glad/glad.h>
 #include <iostream>
 
 namespace AG {
@@ -20,13 +21,13 @@ Framebuffer::~Framebuffer()
 // ==============================================================================
 void Framebuffer::Bind() const
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+    m_FBO.Bind();
     glViewport(0, 0, m_Spec.Width, m_Spec.Height);
 }
 
 void Framebuffer::Unbind() const
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    m_FBO.Unbind();
 }
 
 // ==============================================================================
@@ -58,8 +59,7 @@ unsigned int Framebuffer::GetColorAttachment(int index) const
 // ==============================================================================
 void Framebuffer::Create()
 {
-    glGenFramebuffers(1, &m_FBO);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+    m_FBO.Bind();
 
     for (auto& attachment : m_Spec.Attachments)
     {
@@ -128,11 +128,7 @@ void Framebuffer::Destroy()
         glDeleteTextures(1, &m_DepthAttachment);
         m_DepthAttachment = 0;
     }
-    if (m_FBO)
-    {
-        glDeleteFramebuffers(1, &m_FBO);
-        m_FBO = 0;
-    }
+    // FBO 삭제는 m_FBO 소멸자에 위임 — Resize 시 재사용하기 위해 여기서는 삭제하지 않음
 }
 
 } // namespace AG

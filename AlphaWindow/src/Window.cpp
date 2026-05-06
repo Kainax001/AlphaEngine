@@ -156,7 +156,7 @@ void Window::Close()
 
 void Window::PollEvents()
 {
-    // Created 상태면 루프 첫 프레임 → Running으로 전이
+    // Created 상태면 루프 첫 프레임 -> Running으로 전이
     if (m_State == WindowState::AW_Created)
         TransitionTo(WindowState::AW_Running);
 

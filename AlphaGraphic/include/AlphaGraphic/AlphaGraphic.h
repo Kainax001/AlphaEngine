@@ -11,6 +11,7 @@
 #include "AlphaGraphic/buffer/VBO.h"
 #include "AlphaGraphic/buffer/EBO.h"
 #include "AlphaGraphic/buffer/UBO.h"
+#include "AlphaGraphic/buffer/FBO.h"
 
 // Shader
 #include "AlphaGraphic/shader/Shader.h"

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <glad/glad.h>
 #include <vector>
+#include "AlphaGraphic/buffer/FBO.h"
 
 namespace AG {
 
@@ -45,7 +45,7 @@ private:
     void Create();
     void Destroy();
 
-    unsigned int              m_FBO = 0;
+    FBO                       m_FBO;
     std::vector<unsigned int> m_ColorAttachments;
     unsigned int              m_DepthAttachment = 0;
     FramebufferSpec           m_Spec;

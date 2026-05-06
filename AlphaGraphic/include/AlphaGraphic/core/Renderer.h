@@ -10,6 +10,7 @@ public:
     static bool Init(const std::string& configPath = "");
     static void Shutdown();
 
+    // TODO: virtual로 변경 예정
     static void BeginFrame();
     static void EndFrame();
 

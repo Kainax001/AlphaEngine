@@ -62,6 +62,7 @@ void Sandbox::OnUpdate(float dt)
 
 void Sandbox::OnRender()
 {
+    // window 크기 고정일 경우 aspect 계산 생략하고 상수로 둘 수 있게 해놔야 함, 멤버변수 추가하자.
     int w = GetWindow().GetWidth();
     int h = GetWindow().GetHeight();
     float aspect = (h > 0) ? static_cast<float>(w) / static_cast<float>(h) : 1.0f;
@@ -75,6 +76,7 @@ void Sandbox::OnRender()
     m_Shader.SetMat4("u_Projection", proj);
     m_Shader.SetVec3("u_ViewPos", eye);
 
+    //이부분 나중에 고정조명들은 UBO로 최적화, Dirty Flag 사용.
     m_Shader.SetVec3("u_DirLight_Direction", m_DirLight.GetDirection());
     m_Shader.SetVec3("u_DirLight_Color", m_DirLight.GetColor());
     m_Shader.SetFloat("u_DirLight_Intensity", m_DirLight.GetIntensity());

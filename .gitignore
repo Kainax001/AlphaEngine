@@ -50,5 +50,5 @@ cmake-build-*/
 Thumbs.db
 .DS_Store
 
-#claude
+# claude
 .claude

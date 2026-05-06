@@ -34,6 +34,7 @@ bool Application::Init(const std::string& assetDir)
 
     m_Input.Init(m_Window->GetNativeHandle());
 
+    // 임시 종료키 등록해둠
     m_Window->OnKey([this](int key, int action, int) {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
             m_Window->Close();
@@ -112,10 +113,12 @@ void Application::CancelAllTasks()
         m_TaskQueue.pop();
 }
 
+// update(로직 등) 관리 예정
 void Application::Update(float dt)
 {
 }
 
+// rendering order 관리 예정
 void Application::Render()
 {
 }
