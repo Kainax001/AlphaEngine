@@ -9,8 +9,8 @@
    - [버퍼](#버퍼)
    - [메시](#메시)
    - [텍스처](#텍스처)
-   - [셰이더](#셰이더)
-   - [씬](#씬)
+   - [셰이더](#셰이더) — Shader, ComputeShader, ShaderLibrary, ShaderWatcher
+   - [씬](#씬) — Transform, Camera, Light, Material, MaterialInstance, MaterialLibrary, Model
    - [렌더러](#렌더러)
 5. [AlphaMessenger](#alphamessenger-namespace-amg)
 6. [AlphaApplication](#alphaapplication-namespace-aap)
@@ -432,6 +432,14 @@ Shader(const char* vertPath, const char* fragPath,
 
 void Use() const;
 
+bool Reload();    // 저장된 경로로 재컴파일. 실패 시 이전 셰이더 유지, false 반환
+bool IsValid() const;  // m_ID != 0
+
+// 경로 조회 (ShaderWatcher가 사용)
+const std::string& GetVertPath() const;
+const std::string& GetFragPath() const;
+const std::string& GetGeoPath()  const;
+
 // Uniform 설정
 void SetBool (const std::string& name, bool value)        const;
 void SetInt  (const std::string& name, int value)         const;
@@ -484,6 +492,36 @@ static void    Clear();                           // 전체 해제
 // 사용 예
 ShaderLibrary::Load("Lit", "shaders/Lit.vert", "shaders/Lit.frag");
 Shader& lit = ShaderLibrary::Get("Lit");
+```
+
+#### ShaderWatcher
+
+셰이더 파일 변경을 감지하고 자동으로 재컴파일합니다. 폴링 방식(`std::filesystem::last_write_time`)으로 동작하며 별도 스레드 없이 게임루프 안에서 사용합니다. 컴파일 실패 시 이전 셰이더를 유지하므로 렌더링이 중단되지 않습니다.
+
+```cpp
+// ShaderLibrary에 등록된 셰이더를 이름으로 등록 (경로 자동 획득)
+void Watch(const std::string& name);
+
+// 직접 소유한 Shader 참조 등록
+void Watch(const std::string& name, Shader& shader);
+
+// 프레임마다 호출 — 변경 감지 시 자동 Reload()
+void Update();
+
+void Remove(const std::string& name);
+void Clear();
+```
+
+```cpp
+// 사용 예 (직접 소유)
+AG::ShaderWatcher watcher;
+watcher.Watch("Lit", m_Shader);   // OnInit에서 등록
+
+watcher.Update();                  // OnUpdate에서 호출
+
+// 사용 예 (ShaderLibrary 연동)
+ShaderLibrary::Load("Lit", vertPath, fragPath);
+watcher.Watch("Lit");              // 경로를 ShaderLibrary에서 자동 획득
 ```
 
 ---
@@ -606,20 +644,101 @@ void SetOuterCutOff(float degrees);
 
 #### Material
 
-Shader + Texture 슬롯 + Uniform 값을 하나로 묶는 컨테이너입니다.
+Shader + Texture 슬롯 + Uniform 값을 하나로 묶는 컨테이너입니다. 텍스처는 삽입 순서대로 슬롯 번호가 고정됩니다 (`vector<pair>` 내부 구현으로 순서 보장).
 
 ```cpp
 Material(std::shared_ptr<Shader> shader);
 
-void Bind()   const;  // Shader 활성화 + Texture 바인딩 + Uniform 전송
+void Bind()   const;  // Shader 활성화 + Texture 바인딩 + 모든 Uniform 전송
+void Unbind() const;
+
+// --- Texture (삽입 순서 = slot 번호, 같은 이름 재설정 시 slot 유지) ---
+void SetTexture(const std::string& name, std::shared_ptr<Texture> texture);
+
+// --- Scalar / Vector / Matrix ---
+void SetBool (const std::string& name, bool value);
+void SetInt  (const std::string& name, int value);
+void SetFloat(const std::string& name, float value);
+void SetVec3 (const std::string& name, const glm::vec3& value);
+void SetVec4 (const std::string& name, const glm::vec4& value);
+void SetMat4 (const std::string& name, const glm::mat4& value);
+
+// --- Getter ---
+bool      GetBool (const std::string& name) const;
+int       GetInt  (const std::string& name) const;
+float     GetFloat(const std::string& name) const;
+glm::vec3 GetVec3 (const std::string& name) const;
+glm::vec4 GetVec4 (const std::string& name) const;
+
+bool HasTexture (const std::string& name) const;
+bool HasProperty(const std::string& name) const;  // Bool/Int/Float/Vec3/Vec4/Mat4 중 하나라도 있으면 true
+
+std::shared_ptr<Shader> GetShader()       const;
+int                     GetTextureCount() const;  // 등록된 텍스처 수 (= 다음 할당 슬롯 번호)
+```
+
+```cpp
+// 사용 예
+auto mat = std::make_shared<AG::Material>(shader);
+mat->SetTexture("u_AlbedoMap",  albedoTex);   // slot 0
+mat->SetTexture("u_NormalMap",  normalTex);   // slot 1
+mat->SetVec3("u_Color", glm::vec3(1.0f));
+mat->SetMat4("u_Model", transform.GetModelMatrix());
+mat->Bind();
+```
+
+#### MaterialInstance
+
+같은 베이스 Material을 공유하되 일부 값만 오버라이드합니다. `Bind()` 시 Base → Override 순으로 적용됩니다. 오버라이드하지 않은 값은 Base 값이 그대로 사용됩니다.
+
+```cpp
+MaterialInstance(std::shared_ptr<Material> base);
+
+void Bind()   const;  // Base::Bind() 후 override 값 덮어씌움
 void Unbind() const;
 
 void SetTexture(const std::string& name, std::shared_ptr<Texture> texture);
-void SetFloat  (const std::string& name, float value);
-void SetVec3   (const std::string& name, const glm::vec3& value);
-void SetVec4   (const std::string& name, const glm::vec4& value);
+void SetBool (const std::string& name, bool value);
+void SetInt  (const std::string& name, int value);
+void SetFloat(const std::string& name, float value);
+void SetVec3 (const std::string& name, const glm::vec3& value);
+void SetVec4 (const std::string& name, const glm::vec4& value);
+void SetMat4 (const std::string& name, const glm::mat4& value);
 
-std::shared_ptr<Shader> GetShader() const;
+std::shared_ptr<Material> GetBase() const;
+```
+
+```cpp
+// 사용 예
+auto base = std::make_shared<AG::Material>(litShader);
+base->SetTexture("u_Diffuse", defaultTex);
+base->SetVec3("u_Color", glm::vec3(1.0f));
+
+auto redInst = std::make_shared<AG::MaterialInstance>(base);
+redInst->SetVec3("u_Color", glm::vec3(1, 0, 0));  // 색만 다름
+
+auto blueInst = std::make_shared<AG::MaterialInstance>(base);
+blueInst->SetTexture("u_Diffuse", blueTex);        // 텍스처만 다름
+```
+
+#### MaterialLibrary
+
+이름 기반 전역 Material 캐시입니다. `ShaderLibrary`와 동일한 패턴입니다.
+
+```cpp
+static std::shared_ptr<Material> Load(const std::string& name,
+                                      std::shared_ptr<Shader> shader);  // 생성 + 등록
+static std::shared_ptr<Material> Get   (const std::string& name);  // 없으면 nullptr + 에러 출력
+static bool                      Exists(const std::string& name);
+static void                      Clear();  // 전체 해제 (씬 전환 시 등)
+```
+
+```cpp
+// 사용 예
+auto mat = AG::MaterialLibrary::Load("Lit", litShader);
+mat->SetTexture("u_Diffuse", tex);
+
+auto same = AG::MaterialLibrary::Get("Lit");  // 어디서든 동일 인스턴스 반환
 ```
 
 #### Model
