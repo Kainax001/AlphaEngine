@@ -1,0 +1,43 @@
+# ==============================================================================
+# [SECTION 1] Dependency Loading (Library Search via vcpkg)
+# ==============================================================================
+find_package(glad      CONFIG REQUIRED)
+find_package(glm       CONFIG REQUIRED)
+find_package(assimp    CONFIG REQUIRED)
+find_package(RapidJSON CONFIG REQUIRED)
+
+set(OpenGL_GL_PREFERENCE GLVND)
+find_package(OpenGL REQUIRED)
+
+# ==============================================================================
+# [SECTION 2] Source Files Collection
+# ==============================================================================
+file(GLOB_RECURSE AG_SOURCES "src/*.cpp")
+
+# ==============================================================================
+# [SECTION 3] Build Target (Static Library)
+# ==============================================================================
+add_library(AlphaGraphic STATIC ${AG_SOURCES})
+
+# ==============================================================================
+# [SECTION 4] Include Directories
+# ==============================================================================
+target_include_directories(AlphaGraphic
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include  # Sandbox에서 접근 가능
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src      # 내부 전용
+            ${RAPIDJSON_INCLUDE_DIRS}
+)
+
+# ==============================================================================
+# [SECTION 5] Library Linking
+# ==============================================================================
+target_link_libraries(AlphaGraphic
+    PUBLIC
+        glm::glm        # Sandbox에서 glm 타입 직접 사용
+        glad::glad      # Sandbox에서 GL 타입 직접 사용
+    PRIVATE
+        glfw            # 라이브러리 내부에서만 (유틸 등)
+        assimp::assimp  # 메시 로딩 내부 전용
+        OpenGL::GL
+        ${CMAKE_DL_LIBS}
+)

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake --build build --config Debug)",
+      "Bash(timeout 10 ./Sandbox.exe)",
+      "PowerShell(cd \"C:\\\\Users\\\\admin\\\\Desktop\\\\Vsc_Workspace\\\\AlphaEngine\"; $buildPath = \"build\"; if \\(Test-Path $buildPath\\) { Get-ChildItem -Path $buildPath -Recurse -Force | Where-Object { -not $_.PSIsContainer } | Remove-Item -Force; Get-ChildItem -Path $buildPath -Recurse -Force | Where-Object { $_.PSIsContainer } | Remove-Item -Recurse -Force }; Write-Host \"Build directory cleaned\")",
+      "Bash(cmake --build build --config Debug --clean-first)"
+    ]
+  }
+}

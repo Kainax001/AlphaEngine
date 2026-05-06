@@ -1,0 +1,51 @@
+# Build output
+build/
+out/
+bin/
+lib/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+
+# vcpkg
+vcpkg_installed/
+vcpkg/
+
+# MSVC / Visual Studio
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+ipch/
+*.ncb
+*.aps
+
+# Compiled binaries
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.exp
+*.obj
+
+# VS Code (local-only settings)
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+
+# JetBrains
+.idea/
+cmake-build-*/
+
+# OS
+Thumbs.db
+.DS_Store

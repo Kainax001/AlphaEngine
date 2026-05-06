@@ -1,0 +1,49 @@
+{
+    "clear": {
+        "color":   [0.07, 0.07, 0.10, 1.0],
+        "depth":   1.0,
+        "stencil": 0
+    },
+
+    "depth": {
+        "test": true,
+        "func": "less",
+        "mask": true
+    },
+
+    "blend": {
+        "enabled":  false,
+        "src":      "src_alpha",
+        "dst":      "one_minus_src_alpha",
+        "equation": "add"
+    },
+
+    "cull": {
+        "enabled":    false,
+        "face":       "back",
+        "front_face": "ccw"
+    },
+
+    "stencil": {
+        "test":   false,
+        "func":   "always",
+        "ref":    0,
+        "mask":   255,
+        "sfail":  "keep",
+        "dpfail": "keep",
+        "dppass": "keep"
+    },
+
+    "polygon": {
+        "mode":          "fill",
+        "offset_fill":   false,
+        "offset_factor": 0.0,
+        "offset_units":  0.0
+    },
+
+    "multisample":      true,
+    "framebuffer_srgb": false,
+    "scissor_test":     false,
+    "line_width":       1.0,
+    "point_size":       1.0
+}
