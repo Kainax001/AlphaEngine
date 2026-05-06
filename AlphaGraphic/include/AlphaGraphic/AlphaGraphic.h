@@ -35,5 +35,7 @@
 #include "AlphaGraphic/scene/light/SpotLight.h"
 #include "AlphaGraphic/scene/Camera.h"
 #include "AlphaGraphic/scene/Transform.h"
-#include "AlphaGraphic/scene/Material.h"
+#include "AlphaGraphic/scene/material/Material.h"
+#include "AlphaGraphic/scene/material/MaterialInstance.h"
+#include "AlphaGraphic/scene/material/MaterialLibrary.h"
 #include "AlphaGraphic/scene/Model.h"

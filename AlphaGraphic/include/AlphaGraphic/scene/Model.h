@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AlphaGraphic/mesh/StaticMesh.h"
-#include "AlphaGraphic/scene/Material.h"
+#include "AlphaGraphic/scene/material/Material.h"
 #include "AlphaGraphic/scene/Transform.h"
 #include "AlphaGraphic/texture/Texture2D.h"
 
