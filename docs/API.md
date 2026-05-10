@@ -9,7 +9,7 @@
    - [버퍼](#버퍼)
    - [메시](#메시)
    - [텍스처](#텍스처)
-   - [셰이더](#셰이더) — Shader, ComputeShader, ShaderLibrary, ShaderWatcher
+   - [셰이더](#셰이더) — Shader, ComputeShader, ShaderLibrary
    - [씬](#씬) — Transform, Camera, Light, Material, MaterialInstance, MaterialLibrary, Model
    - [렌더러](#렌더러)
 5. [AlphaMessenger](#alphamessenger-namespace-amg)
@@ -435,7 +435,7 @@ void Use() const;
 bool Reload();    // 저장된 경로로 재컴파일. 실패 시 이전 셰이더 유지, false 반환
 bool IsValid() const;  // m_ID != 0
 
-// 경로 조회 (ShaderWatcher가 사용)
+// 경로 조회 (Reload() 및 외부에서 경로 참조 시 사용)
 const std::string& GetVertPath() const;
 const std::string& GetFragPath() const;
 const std::string& GetGeoPath()  const;
@@ -486,42 +486,27 @@ static Shader& Load(const std::string& name,
 static Shader& Get   (const std::string& name);   // 이름으로 조회
 static bool    Exists(const std::string& name);   // 등록 여부 확인
 static void    Clear();                           // 전체 해제
+
+// Hot-Reload
+static bool Reload   (const std::string& name);  // 특정 셰이더 재컴파일, 없으면 false
+static void ReloadAll();                          // 등록된 모든 셰이더 일괄 재컴파일
 ```
 
 ```cpp
 // 사용 예
 ShaderLibrary::Load("Lit", "shaders/Lit.vert", "shaders/Lit.frag");
 Shader& lit = ShaderLibrary::Get("Lit");
-```
 
-#### ShaderWatcher
+// 키 입력으로 수동 Hot-Reload
+if (input.IsKeyPressed(Key::F5))
+    AG::ShaderLibrary::Reload("Lit");     // 특정 셰이더만
 
-셰이더 파일 변경을 감지하고 자동으로 재컴파일합니다. 폴링 방식(`std::filesystem::last_write_time`)으로 동작하며 별도 스레드 없이 게임루프 안에서 사용합니다. 컴파일 실패 시 이전 셰이더를 유지하므로 렌더링이 중단되지 않습니다.
+if (input.IsKeyPressed(Key::R))
+    AG::ShaderLibrary::ReloadAll();       // 전체 재컴파일
 
-```cpp
-// ShaderLibrary에 등록된 셰이더를 이름으로 등록 (경로 자동 획득)
-void Watch(const std::string& name);
-
-// 직접 소유한 Shader 참조 등록
-void Watch(const std::string& name, Shader& shader);
-
-// 프레임마다 호출 — 변경 감지 시 자동 Reload()
-void Update();
-
-void Remove(const std::string& name);
-void Clear();
-```
-
-```cpp
-// 사용 예 (직접 소유)
-AG::ShaderWatcher watcher;
-watcher.Watch("Lit", m_Shader);   // OnInit에서 등록
-
-watcher.Update();                  // OnUpdate에서 호출
-
-// 사용 예 (ShaderLibrary 연동)
-ShaderLibrary::Load("Lit", vertPath, fragPath);
-watcher.Watch("Lit");              // 경로를 ShaderLibrary에서 자동 획득
+// ShaderLibrary를 사용하지 않는 직접 소유 Shader도 동일 인터페이스
+if (input.IsKeyPressed(Key::F5))
+    m_Shader.Reload();
 ```
 
 ---
