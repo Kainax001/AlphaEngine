@@ -16,18 +16,24 @@ Model::Model(const std::string& path)
 void Model::Draw() const
 {
     if (m_Material)
-        m_Material->Bind();
-
-    for (size_t i = 0; i < m_Meshes.size(); ++i)
     {
-        if (i < m_MeshDiffuse.size() && m_MeshDiffuse[i])
-            m_MeshDiffuse[i]->Bind(0);
-
-        m_Meshes[i]->Draw();
-    }
-
-    if (m_Material)
+        // Material이 설정된 경우: Material 시스템만 사용한다.
+        // m_MeshDiffuse(Assimp fallback)는 바인딩하지 않아 슬롯 충돌을 방지한다.
+        m_Material->Bind();
+        for (size_t i = 0; i < m_Meshes.size(); ++i)
+            m_Meshes[i]->Draw();
         m_Material->Unbind();
+    }
+    else
+    {
+        // Material이 없는 경우: Assimp가 읽어온 메시별 diffuse 텍스처를 슬롯 0에 바인딩한다.
+        for (size_t i = 0; i < m_Meshes.size(); ++i)
+        {
+            if (i < m_MeshDiffuse.size() && m_MeshDiffuse[i])
+                m_MeshDiffuse[i]->Bind(0);
+            m_Meshes[i]->Draw();
+        }
+    }
 }
 
 glm::vec3 Model::GetCenter() const
