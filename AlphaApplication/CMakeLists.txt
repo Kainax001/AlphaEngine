@@ -31,4 +31,5 @@ target_link_libraries(AlphaApplication
         AlphaControler
         AlphaGraphic
         AlphaMessenger
+        AlphaScene
 )
