@@ -52,4 +52,16 @@ void CameraComponent::SetSpeed(float speed)
     m_Camera.SetSpeed(speed);
 }
 
+void CameraComponent::Serialize(rapidjson::Value& out,
+                                  rapidjson::Document::AllocatorType& alloc) const
+{
+    out.AddMember("speed", m_Camera.GetSpeed(), alloc);
+}
+
+void CameraComponent::Deserialize(const rapidjson::Value& in)
+{
+    if (in.HasMember("speed") && in["speed"].IsNumber())
+        m_Camera.SetSpeed(in["speed"].GetFloat());
+}
+
 } // namespace AS

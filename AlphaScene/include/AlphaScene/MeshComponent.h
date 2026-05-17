@@ -32,6 +32,12 @@ public:
 
     const std::shared_ptr<AG::Model>& GetModel() const { return m_Model; }
 
+    const char*     GetTypeName()  const override { return "MeshComponent"; }
+    std::type_index GetTypeIndex() const override { return typeid(MeshComponent); }
+    void Serialize  (rapidjson::Value& out,
+                     rapidjson::Document::AllocatorType& alloc) const override;
+    void Deserialize(const rapidjson::Value& in) override;
+
 private:
     struct UBOSlot {
         AG::UBO*                 ubo     = nullptr; // always valid when slot exists

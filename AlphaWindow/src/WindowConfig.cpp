@@ -1,8 +1,7 @@
 #include "AlphaWindow/WindowConfig.h"
 
+#include <AlphaUtil/Json.h>
 #include <rapidjson/document.h>
-#include <rapidjson/filereadstream.h>
-#include <cstdio>
 #include <iostream>
 
 namespace AW {
@@ -11,29 +10,10 @@ WindowConfig WindowConfig::LoadFromFile(const std::string& path)
 {
     WindowConfig cfg;
 
-    FILE* fp = nullptr;
-#ifdef _MSC_VER
-    fopen_s(&fp, path.c_str(), "rb");
-#else
-    fp = fopen(path.c_str(), "rb");
-#endif
-
-    if (!fp)
-    {
-        std::cerr << "[WindowConfig] Cannot open '" << path << "' — using defaults\n";
-        return cfg;
-    }
-
-    char buf[4096];
-    rapidjson::FileReadStream is(fp, buf, sizeof(buf));
-
     rapidjson::Document doc;
-    doc.ParseStream(is);
-    fclose(fp);
-
-    if (doc.HasParseError())
+    if (!AU::Json::LoadFile(path, doc))
     {
-        std::cerr << "[WindowConfig] JSON parse error in '" << path << "' — using defaults\n";
+        std::cerr << "[WindowConfig] Using defaults\n";
         return cfg;
     }
 

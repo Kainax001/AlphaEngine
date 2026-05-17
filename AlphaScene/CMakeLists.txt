@@ -10,4 +10,5 @@ target_link_libraries(AlphaScene
     PUBLIC
         AlphaGraphic
         AlphaControler
+        AlphaUtil
 )

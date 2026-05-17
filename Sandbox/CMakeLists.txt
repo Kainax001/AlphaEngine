@@ -9,7 +9,12 @@ file(GLOB_RECURSE SANDBOX_SOURCES "src/*.cpp")
 add_executable(Sandbox ${SANDBOX_SOURCES})
 
 # ==============================================================================
-# [SECTION 3] Library Linking
+# [SECTION 3] Include Directories
+# ==============================================================================
+target_include_directories(Sandbox PRIVATE include)
+
+# ==============================================================================
+# [SECTION 4] Library Linking
 # ==============================================================================
 target_link_libraries(Sandbox
     PRIVATE
@@ -20,7 +25,7 @@ target_link_libraries(Sandbox
 )
 
 # ==============================================================================
-# [SECTION 4] Asset Directory Definition
+# [SECTION 5] Asset Directory Definition
 # ==============================================================================
 set(SANDBOX_ASSET_DIR_ABS "${CMAKE_CURRENT_SOURCE_DIR}/assets/")
 

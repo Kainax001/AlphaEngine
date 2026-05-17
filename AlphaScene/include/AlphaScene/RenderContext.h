@@ -4,7 +4,7 @@
 
 namespace AS {
 
-enum class LightType { Directional, Point };
+enum class LightType { Directional, Point, Spot };
 
 struct LightData {
     LightType type      = LightType::Directional;
@@ -15,6 +15,9 @@ struct LightData {
     float constant      = 1.0f;
     float linear        = 0.09f;
     float quadratic     = 0.032f;
+    // Spot light only
+    float cutOff        = 12.5f;  // degrees
+    float outerCutOff   = 17.5f;  // degrees
 };
 
 struct RenderContext {

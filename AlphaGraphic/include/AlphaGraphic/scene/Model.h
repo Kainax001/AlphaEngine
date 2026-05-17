@@ -29,7 +29,8 @@ public:
 
     void Draw() const;
 
-    glm::vec3 GetCenter() const;
+    glm::vec3          GetCenter() const;
+    const std::string& GetPath()   const { return m_Path; }
 
     Transform&       GetTransform()       { return m_Transform; }
     const Transform& GetTransform() const { return m_Transform; }

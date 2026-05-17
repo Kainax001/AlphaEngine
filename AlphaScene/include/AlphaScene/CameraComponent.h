@@ -22,6 +22,12 @@ public:
     const AG::Camera& GetCamera() const { return m_Camera; }
           AG::Camera& GetCamera()       { return m_Camera; }
 
+    const char*     GetTypeName()  const override { return "CameraComponent"; }
+    std::type_index GetTypeIndex() const override { return typeid(CameraComponent); }
+    void Serialize  (rapidjson::Value& out,
+                     rapidjson::Document::AllocatorType& alloc) const override;
+    void Deserialize(const rapidjson::Value& in) override;
+
 private:
     AG::Camera m_Camera;
     float      m_Aspect = 16.0f / 9.0f;

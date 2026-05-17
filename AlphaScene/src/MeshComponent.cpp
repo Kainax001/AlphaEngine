@@ -113,4 +113,37 @@ void MeshComponent::Render(const RenderContext& ctx)
     m_Model->Draw();
 }
 
+void MeshComponent::Serialize(rapidjson::Value& out,
+                               rapidjson::Document::AllocatorType& alloc) const
+{
+    rapidjson::Value modelPath(rapidjson::kStringType);
+    if (m_Model)
+    {
+        const std::string& path = m_Model->GetPath();
+        modelPath.SetString(path.c_str(), static_cast<rapidjson::SizeType>(path.size()), alloc);
+    }
+    else
+    {
+        modelPath.SetString("", 0, alloc);
+    }
+
+    rapidjson::Value shaderName(rapidjson::kStringType);
+    shaderName.SetString(m_ShaderName.c_str(),
+                         static_cast<rapidjson::SizeType>(m_ShaderName.size()), alloc);
+
+    out.AddMember("modelPath",  modelPath,  alloc);
+    out.AddMember("shaderName", shaderName, alloc);
+}
+
+void MeshComponent::Deserialize(const rapidjson::Value& in)
+{
+    if (in.HasMember("modelPath") && in["modelPath"].IsString())
+    {
+        std::string path = in["modelPath"].GetString();
+        if (!path.empty()) LoadModel(path);
+    }
+    if (in.HasMember("shaderName") && in["shaderName"].IsString())
+        SetShaderName(in["shaderName"].GetString());
+}
+
 } // namespace AS

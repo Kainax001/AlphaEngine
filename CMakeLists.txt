@@ -15,6 +15,7 @@ find_package(glfw3 CONFIG REQUIRED)
 # ==============================================================================
 # [SECTION 3] Subprojects
 # ==============================================================================
+add_subdirectory(AlphaUtil)
 add_subdirectory(AlphaGraphic)
 add_subdirectory(AlphaWindow)
 add_subdirectory(AlphaControler)
