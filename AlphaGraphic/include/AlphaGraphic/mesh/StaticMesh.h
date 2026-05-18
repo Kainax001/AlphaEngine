@@ -25,14 +25,21 @@ public:
 
     const std::string& GetPath() const { return m_Path; }
 
+    // CPU-side geometry access (retained after GPU upload for ray tracing)
+    const std::vector<Vertex>& GetVertices() const { return m_Vertices; }
+    const std::vector<GLuint>& GetIndices()  const { return m_Indices; }
+
 private:
     void Setup(std::vector<Vertex>& vertices, std::vector<GLuint>& indices);
     void LoadFromFile(const std::string& path);
 
-    std::unique_ptr<VAO> m_VAO;
-    std::unique_ptr<VBO> m_VBO;
-    std::unique_ptr<EBO> m_EBO;
-    std::string          m_Path;
+    std::unique_ptr<VAO>  m_VAO;
+    std::unique_ptr<VBO>  m_VBO;
+    std::unique_ptr<EBO>  m_EBO;
+    std::string           m_Path;
+
+    std::vector<Vertex>   m_Vertices;
+    std::vector<GLuint>   m_Indices;
 };
 
 } // namespace AG

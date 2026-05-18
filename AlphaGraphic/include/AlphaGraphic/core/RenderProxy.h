@@ -1,5 +1,6 @@
 #pragma once
 
+#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <vector>
 
@@ -34,11 +35,37 @@ struct MeshProxy
     glm::vec4 boundsCenter;  // xyz = AABB center, w = sphere radius
 };
 
+// One triangle in world space — std430 layout (vec4 only, no vec3).
+struct TriangleProxy
+{
+    glm::vec4 v0, v1, v2;   // xyz = world position
+    glm::vec4 n0, n1, n2;   // xyz = world normal (per-vertex, smooth shading)
+    glm::vec4 uv01;          // xy = uv0,  zw = uv1
+    glm::vec4 uv2mat;        // xy = uv2,  z = diffuseMatIdx,  w = specularMatIdx
+};
+
+// BVH node — std430 layout.
+// Internal: left/right = child indices.
+// Leaf:     left = -1, right = triCount, triOffset = start index.
+struct BVHNodeProxy
+{
+    glm::vec4 aabbMin;   // xyz = AABB min corner
+    glm::vec4 aabbMax;   // xyz = AABB max corner
+    int left;            // child index, or -1 for leaf
+    int right;           // child index (internal) or triCount (leaf)
+    int triOffset;       // first triangle index (leaf only)
+    int pad;
+};
+
 struct SceneProxy
 {
-    CameraProxy             camera;
-    std::vector<MeshProxy>  meshes;
-    std::vector<LightProxy> lights;
+    CameraProxy                 camera;
+    std::vector<MeshProxy>      meshes;
+    std::vector<LightProxy>     lights;
+    std::vector<TriangleProxy>  triangles;   // flat world-space list (reordered by BVH build)
+    std::vector<BVHNodeProxy>   bvhNodes;    // built from triangles; root = index 0
+    std::vector<GLuint>         diffuseTexIDs;  // per-mesh, indexed by triangle's z
+    std::vector<GLuint>         specularTexIDs; // per-mesh, indexed by triangle's w
 };
 
 } // namespace AG

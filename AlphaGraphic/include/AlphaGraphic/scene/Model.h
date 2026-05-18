@@ -32,6 +32,10 @@ public:
     glm::vec3          GetCenter() const;
     const std::string& GetPath()   const { return m_Path; }
 
+    const std::vector<std::shared_ptr<StaticMesh>>&  GetMeshes()       const { return m_Meshes; }
+    const std::vector<std::shared_ptr<Texture2D>>&   GetMeshDiffuse()  const { return m_MeshDiffuse; }
+    const std::vector<std::shared_ptr<Texture2D>>&   GetMeshSpecular() const { return m_MeshSpecular; }
+
     Transform&       GetTransform()       { return m_Transform; }
     const Transform& GetTransform() const { return m_Transform; }
 
@@ -46,7 +50,8 @@ private:
                                                                   const std::string& typeName);
 
     std::vector<std::shared_ptr<StaticMesh>>              m_Meshes;
-    std::vector<std::shared_ptr<Texture2D>>               m_MeshDiffuse; // 메시별 diffuse (null 가능)
+    std::vector<std::shared_ptr<Texture2D>>               m_MeshDiffuse;  // 메시별 diffuse  (null 가능)
+    std::vector<std::shared_ptr<Texture2D>>               m_MeshSpecular; // 메시별 specular (null 가능)
     std::shared_ptr<Material>                             m_Material;
     Transform                                             m_Transform;
     std::string                                           m_Path;

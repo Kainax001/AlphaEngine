@@ -42,6 +42,8 @@ unsigned int StaticMesh::GetVAO() const
 
 void StaticMesh::Setup(std::vector<Vertex>& vertices, std::vector<GLuint>& indices)
 {
+    m_Vertices    = vertices;
+    m_Indices     = indices;
     m_VertexCount = (unsigned int)vertices.size();
     m_IndexCount  = (unsigned int)indices.size();
 

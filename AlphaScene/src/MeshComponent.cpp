@@ -1,5 +1,6 @@
 #include "AlphaScene/MeshComponent.h"
 #include "AlphaScene/Actor.h"
+#include <AlphaGraphic/mesh/StaticMesh.h>
 #include <glm/gtc/matrix_inverse.hpp>
 
 namespace AS {
@@ -145,6 +146,71 @@ void MeshComponent::Deserialize(const rapidjson::Value& in)
     }
     if (in.HasMember("shaderName") && in["shaderName"].IsString())
         SetShaderName(in["shaderName"].GetString());
+}
+
+void MeshComponent::FillTriangles(std::vector<AG::TriangleProxy>& out, int matBase) const
+{
+    if (!m_Model) return;
+
+    glm::mat4 model     = m_Owner->GetTransform().GetModelMatrix();
+    glm::mat3 normalMat = glm::mat3(glm::inverseTranspose(glm::mat3(model)));
+
+    const auto& meshes = m_Model->GetMeshes();
+    for (size_t meshIdx = 0; meshIdx < meshes.size(); meshIdx++)
+    {
+        const auto&                    mesh    = meshes[meshIdx];
+        const std::vector<AG::Vertex>& verts   = mesh->GetVertices();
+        const std::vector<GLuint>&     indices = mesh->GetIndices();
+        float matIdxF = static_cast<float>(matBase + static_cast<int>(meshIdx));
+
+        for (size_t i = 0; i + 2 < indices.size(); i += 3)
+        {
+            const AG::Vertex& a = verts[indices[i]];
+            const AG::Vertex& b = verts[indices[i + 1]];
+            const AG::Vertex& c = verts[indices[i + 2]];
+
+            AG::TriangleProxy tri;
+
+            glm::vec4 wa = model * glm::vec4(a.Position.x, a.Position.y, a.Position.z, 1.0f);
+            glm::vec4 wb = model * glm::vec4(b.Position.x, b.Position.y, b.Position.z, 1.0f);
+            glm::vec4 wc = model * glm::vec4(c.Position.x, c.Position.y, c.Position.z, 1.0f);
+            tri.v0 = glm::vec4(wa.x, wa.y, wa.z, 0.0f);
+            tri.v1 = glm::vec4(wb.x, wb.y, wb.z, 0.0f);
+            tri.v2 = glm::vec4(wc.x, wc.y, wc.z, 0.0f);
+
+            glm::vec3 na = glm::normalize(normalMat * a.Normal);
+            glm::vec3 nb = glm::normalize(normalMat * b.Normal);
+            glm::vec3 nc = glm::normalize(normalMat * c.Normal);
+            tri.n0 = glm::vec4(na.x, na.y, na.z, 0.0f);
+            tri.n1 = glm::vec4(nb.x, nb.y, nb.z, 0.0f);
+            tri.n2 = glm::vec4(nc.x, nc.y, nc.z, 0.0f);
+
+            tri.uv01   = glm::vec4(a.TexCoords.x, a.TexCoords.y,
+                                   b.TexCoords.x, b.TexCoords.y);
+            // w is filled later by World with the deduplicated specular slot index
+            tri.uv2mat = glm::vec4(c.TexCoords.x, c.TexCoords.y, matIdxF, matIdxF);
+
+            out.push_back(tri);
+        }
+    }
+}
+
+std::vector<GLuint> MeshComponent::GetDiffuseTextureIDs() const
+{
+    std::vector<GLuint> ids;
+    if (!m_Model) return ids;
+    for (const auto& tex : m_Model->GetMeshDiffuse())
+        ids.push_back(tex ? tex->GetID() : 0u);
+    return ids;
+}
+
+std::vector<GLuint> MeshComponent::GetSpecularTextureIDs() const
+{
+    std::vector<GLuint> ids;
+    if (!m_Model) return ids;
+    for (const auto& tex : m_Model->GetMeshSpecular())
+        ids.push_back(tex ? tex->GetID() : 0u);
+    return ids;
 }
 
 AG::MeshProxy MeshComponent::ToProxy() const

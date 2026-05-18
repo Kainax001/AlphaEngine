@@ -113,6 +113,13 @@ private:
 
     // Developer-owned SSBOs registered via CreateRayTracingSSBO
     std::vector<std::unique_ptr<AG::SSBO>> m_OwnedRTSSBOs;
+
+    // RT geometry cache — rebuilt only when scene changes, not every frame
+    std::vector<AG::TriangleProxy> m_CachedTriangles;
+    std::vector<AG::BVHNodeProxy>  m_CachedBVHNodes;
+    std::vector<GLuint>            m_CachedDiffuseTexIDs;
+    std::vector<GLuint>            m_CachedSpecularTexIDs;
+    bool                           m_RTGeoDirty = true;
 };
 
 } // namespace AS

@@ -6,6 +6,7 @@
 #include "AlphaGraphic/core/Renderer.h"
 #include "AlphaGraphic/core/Framebuffer.h"
 #include "AlphaGraphic/core/RenderProxy.h"
+#include "AlphaGraphic/core/BVHBuilder.h"
 #include "AlphaGraphic/core/BufferManager.h"
 #include "AlphaGraphic/core/FullscreenQuad.h"
 

@@ -2,20 +2,76 @@
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
-// Output image (binding=0, written by this shader, read by FullscreenQuad)
+// Output image (binding=0)
 layout(rgba32f, binding = 0) uniform image2D u_Output;
 
-// Camera data (binding=2, uploaded by BufferManager from CameraProxy)
+// -------------------------------------------------------------------------
+// Diffuse textures — up to 8 materials (binding = 5..12)
+// layout(binding=N) eliminates the need for glUniform calls.
+// -------------------------------------------------------------------------
+// Diffuse textures  (units 5-12)
+uniform sampler2D u_Tex0;
+uniform sampler2D u_Tex1;
+uniform sampler2D u_Tex2;
+uniform sampler2D u_Tex3;
+uniform sampler2D u_Tex4;
+uniform sampler2D u_Tex5;
+uniform sampler2D u_Tex6;
+uniform sampler2D u_Tex7;
+
+// Specular textures (units 13-20)
+uniform sampler2D u_SpecTex0;
+uniform sampler2D u_SpecTex1;
+uniform sampler2D u_SpecTex2;
+uniform sampler2D u_SpecTex3;
+uniform sampler2D u_SpecTex4;
+uniform sampler2D u_SpecTex5;
+uniform sampler2D u_SpecTex6;
+uniform sampler2D u_SpecTex7;
+
+vec4 SampleDiffuse(int idx, vec2 uv)
+{
+    if (idx == 0) return texture(u_Tex0, uv);
+    if (idx == 1) return texture(u_Tex1, uv);
+    if (idx == 2) return texture(u_Tex2, uv);
+    if (idx == 3) return texture(u_Tex3, uv);
+    if (idx == 4) return texture(u_Tex4, uv);
+    if (idx == 5) return texture(u_Tex5, uv);
+    if (idx == 6) return texture(u_Tex6, uv);
+    if (idx == 7) return texture(u_Tex7, uv);
+    return vec4(0.8, 0.8, 0.8, 1.0);
+}
+
+// Returns specular strength in .r (grayscale spec map convention).
+// idx < 0  → no spec map assigned; caller provides albedo-based fallback.
+float SampleSpecular(int idx, vec2 uv)
+{
+    if (idx == 0) return texture(u_SpecTex0, uv).r;
+    if (idx == 1) return texture(u_SpecTex1, uv).r;
+    if (idx == 2) return texture(u_SpecTex2, uv).r;
+    if (idx == 3) return texture(u_SpecTex3, uv).r;
+    if (idx == 4) return texture(u_SpecTex4, uv).r;
+    if (idx == 5) return texture(u_SpecTex5, uv).r;
+    if (idx == 6) return texture(u_SpecTex6, uv).r;
+    if (idx == 7) return texture(u_SpecTex7, uv).r;
+    return -1.0; // sentinel: no map
+}
+
+// -------------------------------------------------------------------------
+// Camera (binding=2)
+// -------------------------------------------------------------------------
 layout(std430, binding = 2) readonly buffer CameraBlock
 {
     mat4 view;
     mat4 projection;
     mat4 invView;
     mat4 invProjection;
-    vec4 camPos;       // xyz = world position
+    vec4 camPos;
 } Camera;
 
-// Light data (binding=3, uploaded by BufferManager from LightProxy[])
+// -------------------------------------------------------------------------
+// Lights (binding=3)
+// -------------------------------------------------------------------------
 struct LightProxy
 {
     vec4 position;    // xyz=pos,  w=type (0=dir,1=point,2=spot)
@@ -29,108 +85,297 @@ layout(std430, binding = 3) readonly buffer LightBlock
     LightProxy lights[];
 } Lights;
 
-// ---------------------------------------------------------------------------
-// Minimal sphere scene (developer-defined — replace with your own geometry)
-// ---------------------------------------------------------------------------
-
-struct Sphere { vec3 center; float radius; vec3 color; float roughness; };
-
-const int NUM_SPHERES = 4;
-Sphere spheres[NUM_SPHERES];
-
-void InitScene()
+// -------------------------------------------------------------------------
+// Triangles (binding=4) — world-space, reordered by BVH build
+// -------------------------------------------------------------------------
+struct Triangle
 {
-    spheres[0] = Sphere(vec3( 0.0,  0.0, -3.0), 0.5, vec3(0.8, 0.2, 0.2), 0.0);
-    spheres[1] = Sphere(vec3( 1.2,  0.0, -3.0), 0.5, vec3(0.2, 0.8, 0.2), 0.3);
-    spheres[2] = Sphere(vec3(-1.2,  0.0, -3.0), 0.5, vec3(0.2, 0.2, 0.8), 0.6);
-    spheres[3] = Sphere(vec3( 0.0, -100.5, -3.0), 100.0, vec3(0.7, 0.7, 0.7), 0.8);
+    vec4 v0, v1, v2;   // xyz = world position
+    vec4 n0, n1, n2;   // xyz = world normal (per-vertex)
+    vec4 uv01;          // xy = uv0, zw = uv1
+    vec4 uv2mat;        // xy = uv2, z = float(matIdx), w = pad
+};
+layout(std430, binding = 4) readonly buffer TriangleBlock
+{
+    Triangle triangles[];
+} Triangles;
+
+// -------------------------------------------------------------------------
+// BVH nodes (binding=5)
+// NOTE: SSBO bindings and sampler2D bindings are separate namespaces —
+//       no conflict with u_Tex0 which uses texture unit 5.
+// -------------------------------------------------------------------------
+struct BVHNode
+{
+    vec4 aabbMin;   // xyz = AABB min
+    vec4 aabbMax;   // xyz = AABB max
+    int  left;      // left child, or -1 (leaf)
+    int  right;     // right child (internal) or triCount (leaf)
+    int  triOffset; // first triangle index (leaf)
+    int  pad;
+};
+layout(std430, binding = 5) readonly buffer BVHBlock
+{
+    BVHNode nodes[];
+} BVH;
+
+// -------------------------------------------------------------------------
+// Möller–Trumbore ray–triangle intersection
+// -------------------------------------------------------------------------
+float HitTriangle(vec3 orig, vec3 dir, Triangle tri, out vec2 bary)
+{
+    vec3  e1 = tri.v1.xyz - tri.v0.xyz;
+    vec3  e2 = tri.v2.xyz - tri.v0.xyz;
+    vec3  h  = cross(dir, e2);
+    float a  = dot(e1, h);
+    if (abs(a) < 1e-7) return -1.0;
+
+    float f = 1.0 / a;
+    vec3  s = orig - tri.v0.xyz;
+    float u = f * dot(s, h);
+    if (u < 0.0 || u > 1.0) return -1.0;
+
+    vec3  q = cross(s, e1);
+    float v = f * dot(dir, q);
+    if (v < 0.0 || u + v > 1.0) return -1.0;
+
+    float t = f * dot(e2, q);
+    if (t < 0.001) return -1.0;
+
+    bary = vec2(u, v);
+    return t;
 }
 
-// ---------------------------------------------------------------------------
-// Ray-sphere intersection
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// BVH traversal
+// -------------------------------------------------------------------------
+const int STACK_SIZE = 64;
 
-struct Ray { vec3 origin; vec3 dir; };
-
-float HitSphere(Sphere s, Ray r)
+void TraverseBVH(vec3 orig, vec3 dir,
+                 out float tMin, out int hitIdx, out vec2 hitBary)
 {
-    vec3  oc = r.origin - s.center;
-    float a  = dot(r.dir, r.dir);
-    float b  = 2.0 * dot(oc, r.dir);
-    float c  = dot(oc, oc) - s.radius * s.radius;
-    float d  = b * b - 4.0 * a * c;
-    if (d < 0.0) return -1.0;
-    return (-b - sqrt(d)) / (2.0 * a);
+    tMin    = 1e20;
+    hitIdx  = -1;
+    hitBary = vec2(0.0);
+
+    vec3 invDir = vec3(
+        abs(dir.x) > 1e-8 ? 1.0 / dir.x : 1e20,
+        abs(dir.y) > 1e-8 ? 1.0 / dir.y : 1e20,
+        abs(dir.z) > 1e-8 ? 1.0 / dir.z : 1e20);
+
+    int stack[STACK_SIZE];
+    int top = 0;
+    stack[top++] = 0; // root
+
+    uint numNodes = uint(BVH.nodes.length());
+
+    while (top > 0)
+    {
+        int idx = stack[--top];
+        if (idx < 0 || uint(idx) >= numNodes) continue;
+
+        BVHNode node = BVH.nodes[idx];
+
+        // Slab test
+        vec3 t0 = (node.aabbMin.xyz - orig) * invDir;
+        vec3 t1 = (node.aabbMax.xyz - orig) * invDir;
+        vec3 tNear = min(t0, t1);
+        vec3 tFar  = max(t0, t1);
+        float tEnter = max(max(tNear.x, tNear.y), tNear.z);
+        float tExit  = min(min(tFar.x,  tFar.y),  tFar.z);
+        if (tEnter > tExit || tExit < 0.001 || tEnter > tMin) continue;
+
+        if (node.left < 0)
+        {
+            // Leaf: test each triangle
+            for (int i = node.triOffset; i < node.triOffset + node.right; i++)
+            {
+                vec2  bary;
+                float t = HitTriangle(orig, dir, Triangles.triangles[i], bary);
+                if (t > 0.001 && t < tMin)
+                {
+                    tMin    = t;
+                    hitIdx  = i;
+                    hitBary = bary;
+                }
+            }
+        }
+        else
+        {
+            if (top + 1 < STACK_SIZE)
+            {
+                stack[top++] = node.left;
+                stack[top++] = node.right;
+            }
+        }
+    }
 }
 
-// ---------------------------------------------------------------------------
-// Shading — simple diffuse + first directional light
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// Shading
+// -------------------------------------------------------------------------
+const float SHININESS = 64.0;  // highlight sharpness — raise for mirror-like metal
 
-vec3 Shade(vec3 hitPos, vec3 normal, vec3 albedo)
+vec3 Shade(vec3 hitPos, vec3 normal, vec3 albedo, float specStrength)
 {
-    vec3 ambient = albedo * 0.1;
+    vec3 viewDir = normalize(Camera.camPos.xyz - hitPos);
+    vec3 ambient = albedo * 0.12;
     vec3 result  = ambient;
 
-    // Use the first light from the SSBO (if any)
     uint numLights = uint(Lights.lights.length());
-    if (numLights > 0u)
+    for (uint i = 0u; i < numLights; i++)
     {
-        LightProxy L   = Lights.lights[0];
-        vec3 lightDir  = -normalize(L.direction.xyz);
+        LightProxy L    = Lights.lights[i];
+        int   ltype     = int(L.position.w);
         float intensity = L.direction.w;
-        vec3  lightColor = L.color.rgb * intensity;
-        float diff = max(dot(normal, lightDir), 0.0);
+        if (intensity < 0.001) continue; // skip invalid/uninitialized lights
+
+        vec3  lightDir    = vec3(0.0, 1.0, 0.0);
+        float attenuation = 1.0;
+
+        if (ltype == 0) // Directional
+        {
+            vec3 d = L.direction.xyz;
+            if (dot(d, d) < 1e-10) continue;
+            lightDir = -normalize(d);
+        }
+        else if (ltype == 1) // Point
+        {
+            vec3  toLight = L.position.xyz - hitPos;
+            float dist    = length(toLight);
+            if (dist < 1e-5) continue;
+            lightDir = toLight / dist;
+            float c  = L.attenuation.x;
+            float li = L.attenuation.y;
+            float q  = L.attenuation.z;
+            attenuation = 1.0 / max(c + li * dist + q * dist * dist, 1.0);
+        }
+        else // Spot
+        {
+            vec3  toLight = L.position.xyz - hitPos;
+            float dist    = length(toLight);
+            if (dist < 1e-5) continue;
+            lightDir = toLight / dist;
+            float c  = L.attenuation.x;
+            float li = L.attenuation.y;
+            float q  = L.attenuation.z;
+            attenuation = 1.0 / max(c + li * dist + q * dist * dist, 1.0);
+
+            vec3 sd = L.direction.xyz;
+            if (dot(sd, sd) < 1e-10) continue;
+            float cosTheta = dot(-lightDir, normalize(sd));
+            float eps = L.spotParams.x - L.spotParams.y;
+            float spotFactor = (abs(eps) < 1e-5)
+                ? (cosTheta >= L.spotParams.x ? 1.0 : 0.0)
+                : clamp((cosTheta - L.spotParams.y) / eps, 0.0, 1.0);
+            attenuation *= spotFactor;
+        }
+
+        float diff = dot(normal, lightDir);
+        if (diff <= 0.0 || isnan(diff)) continue;
+
+        vec3 lightColor = L.color.rgb * intensity * attenuation;
+
+        // Diffuse (Lambertian)
         result += albedo * lightColor * diff;
+
+        // Specular (Blinn-Phong) — strength driven by specular map
+        vec3  halfVec = normalize(lightDir + viewDir);
+        float spec    = pow(max(dot(normal, halfVec), 0.0), SHININESS);
+        result += lightColor * spec * specStrength;
     }
     return result;
 }
 
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------
 // Main
-// ---------------------------------------------------------------------------
-
+// -------------------------------------------------------------------------
 void main()
 {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size  = imageSize(u_Output);
     if (pixel.x >= size.x || pixel.y >= size.y) return;
 
-    InitScene();
-
-    // Reconstruct ray from camera matrices
-    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    // Reconstruct world-space ray
+    vec2 uv  = (vec2(pixel) + 0.5) / vec2(size);
     vec2 ndc = uv * 2.0 - 1.0;
 
     vec4 rayClip  = vec4(ndc, -1.0, 1.0);
     vec4 rayView  = Camera.invProjection * rayClip;
     rayView       = vec4(rayView.xy, -1.0, 0.0);
     vec3 rayWorld = normalize((Camera.invView * rayView).xyz);
+    vec3 rayOrig  = Camera.camPos.xyz;
 
-    Ray ray;
-    ray.origin = Camera.camPos.xyz;
-    ray.dir    = rayWorld;
+    // BVH traversal
+    float tMin;
+    int   hitIdx;
+    vec2  hitBary;
+    TraverseBVH(rayOrig, rayWorld, tMin, hitIdx, hitBary);
 
-    // Find closest sphere hit
-    float  tMin    = 1e20;
-    int    hitIdx  = -1;
-    for (int i = 0; i < NUM_SPHERES; i++)
-    {
-        float t = HitSphere(spheres[i], ray);
-        if (t > 0.001 && t < tMin)
-        {
-            tMin   = t;
-            hitIdx = i;
-        }
-    }
-
-    vec3 color = vec3(0.05, 0.05, 0.1); // background
+    vec3 color = vec3(0.05, 0.07, 0.12); // background sky
     if (hitIdx >= 0)
     {
-        vec3 hitPos = ray.origin + tMin * ray.dir;
-        vec3 normal = normalize(hitPos - spheres[hitIdx].center);
-        color = Shade(hitPos, normal, spheres[hitIdx].color);
+        Triangle tri = Triangles.triangles[hitIdx];
+
+        // Interpolate smooth normal
+        float w   = 1.0 - hitBary.x - hitBary.y;
+        vec3 norm = w         * tri.n0.xyz
+                  + hitBary.x * tri.n1.xyz
+                  + hitBary.y * tri.n2.xyz;
+        float lenSq = dot(norm, norm);
+        if (isnan(lenSq) || lenSq < 1e-10)
+        {
+            // Degenerate vertex normals — fall back to face normal
+            norm = cross(tri.v1.xyz - tri.v0.xyz, tri.v2.xyz - tri.v0.xyz);
+            lenSq = dot(norm, norm);
+        }
+        norm = (lenSq > 1e-10) ? normalize(norm) : vec3(0.0, 1.0, 0.0);
+
+        // Interpolate UV
+        vec2 uv0 = tri.uv01.xy;
+        vec2 uv1 = tri.uv01.zw;
+        vec2 uv2 = tri.uv2mat.xy;
+        vec2 uvHit = w * uv0 + hitBary.x * uv1 + hitBary.y * uv2;
+
+        int diffIdx = int(tri.uv2mat.z);
+        int specIdx = int(tri.uv2mat.w);
+
+        // Guard against NaN UVs (degenerate triangles)
+        if (isnan(uvHit.x) || isnan(uvHit.y)) uvHit = vec2(0.0);
+
+        vec3 albedo = SampleDiffuse(diffIdx, uvHit).rgb;
+        if (isnan(albedo.r) || isnan(albedo.g) || isnan(albedo.b))
+            albedo = vec3(0.8);
+
+        float specStrength = SampleSpecular(specIdx, uvHit);
+        if (specStrength < 0.0)
+        {
+            // No spec map — estimate from albedo luminance.
+            // Bright (metal/wood/leather) → more glossy, dark (cloth) → matte.
+            float lum = dot(albedo, vec3(0.299, 0.587, 0.114));
+            specStrength = mix(0.08, 0.55, smoothstep(0.15, 0.75, lum));
+        }
+
+        vec3 hitPos = rayOrig + tMin * rayWorld;
+        color = Shade(hitPos, norm, albedo, specStrength);
     }
+
+    // NaN safety net
+    if (isnan(color.r) || isnan(color.g) || isnan(color.b))
+        color = vec3(0.0);
+
+    // Exposure — lower = darker, raise if scene looks too dim
+    const float EXPOSURE = 0.5;
+    color *= EXPOSURE;
+
+    // ACES Filmic tonemapping — preserves saturation far better than Reinhard
+    {
+        const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+        color = clamp((color * (a * color + b)) /
+                      (color * (c * color + d) + e), 0.0, 1.0);
+    }
+    // Gamma correction (linear → sRGB)
+    color = pow(color, vec3(1.0 / 2.2));
 
     imageStore(u_Output, pixel, vec4(color, 1.0));
 }

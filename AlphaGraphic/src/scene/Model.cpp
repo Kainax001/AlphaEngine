@@ -108,16 +108,21 @@ std::shared_ptr<StaticMesh> Model::ProcessMesh(aiMesh* mesh, const aiScene* scen
             indices.push_back(face.mIndices[j]);
     }
 
-    // MTL에서 diffuse 텍스처 로딩
-    std::shared_ptr<Texture2D> diffuseTex = nullptr;
+    // MTL에서 diffuse / specular 텍스처 로딩
+    std::shared_ptr<Texture2D> diffuseTex  = nullptr;
+    std::shared_ptr<Texture2D> specularTex = nullptr;
     if (mesh->mMaterialIndex < scene->mNumMaterials)
     {
         aiMaterial* mat = scene->mMaterials[mesh->mMaterialIndex];
-        auto textures = LoadMaterialTextures(mat, aiTextureType_DIFFUSE, "diffuse");
-        if (!textures.empty())
-            diffuseTex = textures[0];
+
+        auto diffTextures = LoadMaterialTextures(mat, aiTextureType_DIFFUSE,  "diffuse");
+        if (!diffTextures.empty())  diffuseTex  = diffTextures[0];
+
+        auto specTextures = LoadMaterialTextures(mat, aiTextureType_SPECULAR, "specular");
+        if (!specTextures.empty())  specularTex = specTextures[0];
     }
     m_MeshDiffuse.push_back(diffuseTex);
+    m_MeshSpecular.push_back(specularTex);
 
     return std::make_shared<StaticMesh>(vertices, indices);
 }

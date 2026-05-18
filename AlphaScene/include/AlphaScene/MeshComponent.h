@@ -32,6 +32,15 @@ public:
 
     AG::MeshProxy ToProxy() const;
 
+    // Appends world-space triangles to 'out' for ray tracing.
+    // matBase: global material index offset (for multi-mesh scenes).
+    void FillTriangles(std::vector<AG::TriangleProxy>& out, int matBase = 0) const;
+
+    // Returns GL texture IDs for each sub-mesh diffuse texture (0 if none).
+    std::vector<GLuint> GetDiffuseTextureIDs()  const;
+    // Returns GL texture IDs for each sub-mesh specular texture (0 if none).
+    std::vector<GLuint> GetSpecularTextureIDs() const;
+
     const std::shared_ptr<AG::Model>& GetModel() const { return m_Model; }
 
     const char*     GetTypeName()  const override { return "MeshComponent"; }

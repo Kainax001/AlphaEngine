@@ -1,4 +1,5 @@
 #include "AlphaScene/World.h"
+#include <AlphaGraphic/core/BVHBuilder.h>
 #include "AlphaScene/CameraComponent.h"
 #include "AlphaScene/LightComponent.h"
 #include "AlphaScene/MeshComponent.h"
@@ -10,6 +11,7 @@
 #include <rapidjson/document.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <unordered_map>
 #include <iostream>
 
 namespace AS {
@@ -98,6 +100,10 @@ void World::EnableDefaultLighting(GLuint binding)
 
 void World::FlushPendingActors()
 {
+    // Mark RT geometry dirty only when the actor list actually changes
+    if (!m_PendingAdd.empty() || !m_PendingRemove.empty())
+        m_RTGeoDirty = true;
+
     for (auto& actor : m_PendingAdd)
     {
         actor->BeginPlay();
@@ -184,6 +190,8 @@ void World::Tick(float dt)
 AG::SceneProxy World::CollectSceneProxy() const
 {
     AG::SceneProxy proxy;
+    int matBase = 0;
+
     for (const auto& actor : m_Actors)
     {
         if (!actor->IsActive()) continue;
@@ -192,7 +200,19 @@ AG::SceneProxy World::CollectSceneProxy() const
         if (auto* light = actor->GetComponent<LightComponent>())
             proxy.lights.push_back(light->ToProxy());
         if (auto* mesh = actor->GetComponent<MeshComponent>())
+        {
             proxy.meshes.push_back(mesh->ToProxy());
+            mesh->FillTriangles(proxy.triangles, matBase);
+
+            // Collect diffuse + specular texture IDs in material-index order
+            for (GLuint id : mesh->GetDiffuseTextureIDs())
+                proxy.diffuseTexIDs.push_back(id);
+            for (GLuint id : mesh->GetSpecularTextureIDs())
+                proxy.specularTexIDs.push_back(id);
+
+            if (mesh->GetModel())
+                matBase += static_cast<int>(mesh->GetModel()->GetMeshes().size());
+        }
     }
     return proxy;
 }
@@ -272,13 +292,6 @@ void World::Render()
     if (m_DefaultLightingEnabled)
         UpdateDefaultLightingUBO(ctx);
 
-    // Stage 2b: Update BufferManager SSBOs (ray tracing)
-    if (m_RenderMode != RenderMode::Rasterization && m_BufferManager)
-    {
-        AG::SceneProxy proxy = CollectSceneProxy();
-        m_BufferManager->Update(proxy);
-    }
-
     // Stage 3a: Rasterization pass
     if (m_RenderMode == RenderMode::Rasterization ||
         m_RenderMode == RenderMode::Hybrid)
@@ -299,14 +312,146 @@ void World::Render()
     if ((m_RenderMode == RenderMode::RayTracing ||
          m_RenderMode == RenderMode::Hybrid)
         && m_ComputeShader && m_ComputeShader->IsValid()
-        && m_RTOutputTexture != 0)
+        && m_RTOutputTexture != 0 && m_BufferManager)
     {
+        if (m_RTGeoDirty || m_CachedTriangles.empty())
+        {
+            // Full scene collection — only runs when geometry changes
+            AG::SceneProxy proxy = CollectSceneProxy();
+
+            // Deduplicate diffuse + specular textures independently.
+            // Remap triangle.uv2mat.z → unique diffuse slot
+            //              triangle.uv2mat.w → unique specular slot
+            {
+                auto buildDedup = [](const std::vector<GLuint>& ids,
+                                     std::unordered_map<GLuint,int>& slotMap,
+                                     std::vector<GLuint>& unique)
+                {
+                    for (GLuint id : ids)
+                        if (slotMap.find(id) == slotMap.end())
+                        {
+                            slotMap[id] = static_cast<int>(unique.size());
+                            unique.push_back(id);
+                        }
+                };
+
+                // Diffuse: include texID=0 (shows as black → handled by shader fallback)
+                std::unordered_map<GLuint,int> diffSlot;
+                std::vector<GLuint> uniqueDiff;
+                buildDedup(proxy.diffuseTexIDs, diffSlot, uniqueDiff);
+
+                // Specular: exclude texID=0 — those meshes get sentinel -1
+                // so the shader applies a surface-type default instead of sampling zero
+                std::unordered_map<GLuint,int> specSlot;
+                std::vector<GLuint> uniqueSpec;
+                for (GLuint id : proxy.specularTexIDs)
+                    if (id != 0 && specSlot.find(id) == specSlot.end())
+                    {
+                        specSlot[id] = static_cast<int>(uniqueSpec.size());
+                        uniqueSpec.push_back(id);
+                    }
+
+                for (auto& tri : proxy.triangles)
+                {
+                    int origIdx = static_cast<int>(tri.uv2mat.z);
+                    int nDiff   = static_cast<int>(proxy.diffuseTexIDs.size());
+                    int nSpec   = static_cast<int>(proxy.specularTexIDs.size());
+
+                    if (origIdx >= 0 && origIdx < nDiff)
+                        tri.uv2mat.z = static_cast<float>(
+                            diffSlot.at(proxy.diffuseTexIDs[origIdx]));
+
+                    if (origIdx >= 0 && origIdx < nSpec)
+                    {
+                        GLuint sid = proxy.specularTexIDs[origIdx];
+                        // -1.0 = no spec map → shader uses per-albedo default
+                        tri.uv2mat.w = (sid == 0)
+                            ? -1.0f
+                            : static_cast<float>(specSlot.at(sid));
+                    }
+                    else
+                    {
+                        tri.uv2mat.w = -1.0f;
+                    }
+                }
+                proxy.diffuseTexIDs  = std::move(uniqueDiff);
+                proxy.specularTexIDs = std::move(uniqueSpec);
+            }
+
+            if (!proxy.triangles.empty())
+                proxy.bvhNodes = AG::BVHBuilder::Build(proxy.triangles);
+
+            // Upload everything to GPU before moving into cache
+            m_BufferManager->Update(proxy);
+
+            m_CachedTriangles      = std::move(proxy.triangles);
+            m_CachedBVHNodes       = std::move(proxy.bvhNodes);
+            m_CachedDiffuseTexIDs  = std::move(proxy.diffuseTexIDs);
+            m_CachedSpecularTexIDs = std::move(proxy.specularTexIDs);
+            m_RTGeoDirty = false;
+
+            std::cout << "[World] BVH rebuilt: "
+                      << m_CachedTriangles.size()      << " tris, "
+                      << m_CachedBVHNodes.size()       << " nodes, "
+                      << m_CachedDiffuseTexIDs.size()  << " diff / "
+                      << m_CachedSpecularTexIDs.size() << " spec textures\n";
+        }
+        else
+        {
+            // Fast path: only camera + lights — no FillTriangles, no BVH, no SSBO copy
+            AG::CameraProxy camProxy{};
+            std::vector<AG::LightProxy> lightProxies;
+            for (const auto& actor : m_Actors)
+            {
+                if (!actor->IsActive()) continue;
+                if (auto* cam = actor->GetComponent<CameraComponent>())
+                    camProxy = cam->ToProxy();
+                if (auto* light = actor->GetComponent<LightComponent>())
+                    lightProxies.push_back(light->ToProxy());
+            }
+            m_BufferManager->UpdateDynamic(camProxy, lightProxies);
+        }
+
         m_BufferManager->BindAll();
+
+        // Diffuse textures → units 5-12
+        static constexpr int MAX_TEX = 8;
+        int numDiff = std::min(static_cast<int>(m_CachedDiffuseTexIDs.size()), MAX_TEX);
+        for (int i = 0; i < numDiff; i++)
+        {
+            glActiveTexture(GL_TEXTURE5 + i);
+            glBindTexture(GL_TEXTURE_2D, m_CachedDiffuseTexIDs[i]);
+        }
+        // Specular textures → units 13-20
+        int numSpec = std::min(static_cast<int>(m_CachedSpecularTexIDs.size()), MAX_TEX);
+        for (int i = 0; i < numSpec; i++)
+        {
+            glActiveTexture(GL_TEXTURE13 + i);
+            glBindTexture(GL_TEXTURE_2D, m_CachedSpecularTexIDs[i]);
+        }
 
         glBindImageTexture(0, m_RTOutputTexture, 0, GL_FALSE, 0,
                            GL_WRITE_ONLY, GL_RGBA32F);
 
         m_ComputeShader->Use();
+        // Diffuse samplers → texture units 5-12
+        m_ComputeShader->SetInt("u_Tex0", 5);
+        m_ComputeShader->SetInt("u_Tex1", 6);
+        m_ComputeShader->SetInt("u_Tex2", 7);
+        m_ComputeShader->SetInt("u_Tex3", 8);
+        m_ComputeShader->SetInt("u_Tex4", 9);
+        m_ComputeShader->SetInt("u_Tex5", 10);
+        m_ComputeShader->SetInt("u_Tex6", 11);
+        m_ComputeShader->SetInt("u_Tex7", 12);
+        // Specular samplers → texture units 13-20
+        m_ComputeShader->SetInt("u_SpecTex0", 13);
+        m_ComputeShader->SetInt("u_SpecTex1", 14);
+        m_ComputeShader->SetInt("u_SpecTex2", 15);
+        m_ComputeShader->SetInt("u_SpecTex3", 16);
+        m_ComputeShader->SetInt("u_SpecTex4", 17);
+        m_ComputeShader->SetInt("u_SpecTex5", 18);
+        m_ComputeShader->SetInt("u_SpecTex6", 19);
+        m_ComputeShader->SetInt("u_SpecTex7", 20);
         m_ComputeShader->Dispatch(
             static_cast<GLuint>((m_RTWidth  + 15) / 16),
             static_cast<GLuint>((m_RTHeight + 15) / 16));
@@ -329,6 +474,11 @@ void World::EndPlay()
     m_SharedUBOs.clear();
     m_DefaultLightingEnabled = false;
     m_OwnedRTSSBOs.clear();
+    m_CachedTriangles.clear();
+    m_CachedBVHNodes.clear();
+    m_CachedDiffuseTexIDs.clear();
+    m_CachedSpecularTexIDs.clear();
+    m_RTGeoDirty = true;
 }
 
 // ---------------------------------------------------------------------------

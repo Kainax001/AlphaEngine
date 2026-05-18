@@ -39,7 +39,7 @@ void SSBO::UpdateData(GLintptr offset, GLsizeiptr size, const void* data)
 
 void SSBO::Resize(GLsizeiptr newSize)
 {
-    if (newSize <= m_Size) return;
+    if (newSize == m_Size) return;
     m_Size = newSize;
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ID);
     glBufferData(GL_SHADER_STORAGE_BUFFER, newSize, nullptr, m_Usage);

@@ -14,14 +14,21 @@ namespace AG {
 class BufferManager
 {
 public:
-    static constexpr GLuint CAMERA_BINDING = 2;
-    static constexpr GLuint LIGHT_BINDING  = 3;
-    static constexpr int    MAX_LIGHTS     = 64;
+    static constexpr GLuint CAMERA_BINDING   = 2;
+    static constexpr GLuint LIGHT_BINDING    = 3;
+    static constexpr GLuint TRIANGLE_BINDING = 4;
+    static constexpr GLuint BVH_BINDING      = 5;
+    static constexpr int    MAX_LIGHTS       = 64;
 
     BufferManager();
 
-    // Upload SceneProxy data to GPU SSBOs.
+    // Upload full SceneProxy (camera + lights + triangles + BVH) to GPU SSBOs.
     void Update(const SceneProxy& proxy);
+
+    // Upload only camera and lights — skip expensive geometry re-upload.
+    // Call this every frame when geometry hasn't changed.
+    void UpdateDynamic(const CameraProxy& camera,
+                       const std::vector<LightProxy>& lights);
 
     // Bind all managed SSBOs to their binding points.
     void BindAll()   const;
@@ -30,12 +37,16 @@ public:
     // Register a developer-created SSBO (raw pointer, not owned).
     void RegisterSSBO(const std::string& name, SSBO* ssbo);
 
-    SSBO* GetCameraSSBO() const { return m_CameraSSBO.get(); }
-    SSBO* GetLightSSBO()  const { return m_LightSSBO.get(); }
+    SSBO* GetCameraSSBO()   const { return m_CameraSSBO.get(); }
+    SSBO* GetLightSSBO()    const { return m_LightSSBO.get(); }
+    SSBO* GetTriangleSSBO() const { return m_TriangleSSBO.get(); }
+    SSBO* GetBVHNodeSSBO()  const { return m_BVHNodeSSBO.get(); }
 
 private:
     std::unique_ptr<SSBO> m_CameraSSBO;
     std::unique_ptr<SSBO> m_LightSSBO;
+    std::unique_ptr<SSBO> m_TriangleSSBO;
+    std::unique_ptr<SSBO> m_BVHNodeSSBO;
     std::unordered_map<std::string, SSBO*> m_CustomSSBOs;
 };
 
