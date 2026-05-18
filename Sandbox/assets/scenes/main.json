@@ -1,0 +1,206 @@
+{
+    "version": 1,
+    "defaultLighting": {
+        "enabled": true,
+        "binding": 1
+    },
+    "actors": [
+        {
+            "name": "MainCamera",
+            "active": true,
+            "transform": {
+                "position": [
+                    0.0,
+                    1.0,
+                    5.0
+                ],
+                "eulerDeg": [
+                    0.0,
+                    -0.0,
+                    0.0
+                ],
+                "scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "components": [
+                {
+                    "type": "CameraComponent",
+                    "data": {
+                        "speed": 4.0
+                    }
+                },
+                {
+                    "type": "InputComponent",
+                    "data": {}
+                }
+            ]
+        },
+        {
+            "name": "Backpack",
+            "active": true,
+            "transform": {
+                "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "eulerDeg": [
+                    0.0,
+                    -0.0,
+                    0.0
+                ],
+                "scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "components": [
+                {
+                    "type": "MeshComponent",
+                    "data": {
+                        "modelPath": "C:/Users/admin/Desktop/Vsc_Workspace/AlphaEngine/Sandbox/assets/models/backpack/backpack.obj",
+                        "shaderName": "Lit"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "DirLight",
+            "active": true,
+            "transform": {
+                "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "eulerDeg": [
+                    0.0,
+                    -0.0,
+                    0.0
+                ],
+                "scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "components": [
+                {
+                    "type": "LightComponent",
+                    "data": {
+                        "lightType": "Directional",
+                        "direction": [
+                            -0.30304574966430664,
+                            -0.5050762295722961,
+                            -0.8081219792366028
+                        ],
+                        "color": [
+                            1.0,
+                            0.949999988079071,
+                            0.800000011920929
+                        ],
+                        "intensity": 1.0
+                    }
+                }
+            ]
+        },
+        {
+            "name": "SpotLight",
+            "active": true,
+            "transform": {
+                "position": [
+                    0.0,
+                    4.0,
+                    3.0
+                ],
+                "eulerDeg": [
+                    0.0,
+                    -0.0,
+                    0.0
+                ],
+                "scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "components": [
+                {
+                    "type": "LightComponent",
+                    "data": {
+                        "lightType": "Spot",
+                        "position": [
+                            0.0,
+                            4.0,
+                            3.0
+                        ],
+                        "direction": [
+                            0.0,
+                            -1.0,
+                            -0.800000011920929
+                        ],
+                        "cutOff": 12.5,
+                        "outerCutOff": 17.5,
+                        "color": [
+                            1.0,
+                            1.0,
+                            0.949999988079071
+                        ],
+                        "intensity": 3.0
+                    }
+                }
+            ]
+        },
+        {
+            "name": "PointLight",
+            "active": true,
+            "transform": {
+                "position": [
+                    3.0,
+                    3.0,
+                    4.0
+                ],
+                "eulerDeg": [
+                    0.0,
+                    -0.0,
+                    0.0
+                ],
+                "scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "components": [
+                {
+                    "type": "LightComponent",
+                    "data": {
+                        "lightType": "Point",
+                        "position": [
+                            3.0,
+                            3.0,
+                            4.0
+                        ],
+                        "constant": 1.0,
+                        "linear": 0.09000000357627869,
+                        "quadratic": 0.03200000151991844,
+                        "color": [
+                            1.0,
+                            0.8999999761581421,
+                            0.800000011920929
+                        ],
+                        "intensity": 5.0
+                    }
+                },
+                {
+                    "type": "OrbitComponent",
+                    "data": {}
+                }
+            ]
+        }
+    ]
+}

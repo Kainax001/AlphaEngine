@@ -1,19 +1,20 @@
 #pragma once
 #include <functional>
-#include <queue>
-#include <mutex>
 #include <memory>
+#include <mutex>
+#include <queue>
 #include <AlphaWindow/AlphaWindow.h>
 #include <AlphaControler/AlphaControler.h>
+#include <AlphaScene/AlphaScene.h>
 
 namespace AAP {
 
 struct Task {
     std::function<void()> callback;
     float elapsedTime = 0.0f;
-    float delayTime = 0.0f;
-    bool oneShot = true;
-    bool isActive = true;
+    float delayTime   = 0.0f;
+    bool  oneShot     = true;
+    bool  isActive    = true;
 };
 
 class Application {
@@ -29,15 +30,20 @@ public:
     void CancelAllTasks();
 
 protected:
-    virtual bool OnInit() { return true; }
-    virtual void OnShutdown() {}
-    virtual void OnUpdate(float dt) {}
-    virtual void OnRender() {}
+    // Override to spawn Actors and set up the World.
+    virtual void OnWorldInit(AS::World* world) {}
 
-    AW::Window& GetWindow() { return *m_Window; }
-    AC::Input& GetInput() { return m_Input; }
+    // Optional hooks (called every frame; kept for backward compatibility).
+    virtual bool OnInit()          { return true; }
+    virtual void OnShutdown()      {}
+    virtual void OnUpdate(float dt){}
+    virtual void OnRender()        {}
+
+    AW::Window& GetWindow()  { return *m_Window; }
+    AC::Input&  GetInput()   { return m_Input; }
+    AS::World*  GetWorld()   { return m_World.get(); }
     float GetDeltaTime() const { return m_DeltaTime; }
-    float GetTime() const { return m_CurrentTime; }
+    float GetTime()      const { return m_CurrentTime; }
 
 private:
     void Update(float dt);
@@ -45,15 +51,16 @@ private:
     void ProcessTaskQueue(float dt);
 
     std::unique_ptr<AW::Window> m_Window;
-    AC::Input m_Input;
+    AC::Input                   m_Input;
+    std::unique_ptr<AS::World>  m_World;
 
     std::queue<Task> m_TaskQueue;
-    std::mutex m_TaskMutex;
+    std::mutex       m_TaskMutex;
 
     float m_CurrentTime = 0.0f;
-    float m_LastTime = 0.0f;
-    float m_DeltaTime = 0.0f;
-    bool m_IsRunning = false;
+    float m_LastTime    = 0.0f;
+    float m_DeltaTime   = 0.0f;
+    bool  m_IsRunning   = false;
 };
 
 } // namespace AAP

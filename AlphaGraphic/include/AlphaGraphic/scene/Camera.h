@@ -32,8 +32,9 @@ public:
     const glm::vec3& GetFront()    const { return m_Front; }
     float            GetZoom()     const { return m_Zoom; }
 
-    void SetPosition(const glm::vec3& position) { m_Position = position; }
-    void SetSpeed   (float speed)               { m_Speed    = speed; }
+    void  SetPosition(const glm::vec3& position) { m_Position = position; }
+    void  SetSpeed   (float speed)              { m_Speed    = speed; }
+    float GetSpeed   ()               const     { return m_Speed; }
 
 private:
     void UpdateVectors();

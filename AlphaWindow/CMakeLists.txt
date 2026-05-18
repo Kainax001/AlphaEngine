@@ -3,7 +3,6 @@
 # ==============================================================================
 find_package(glfw3      CONFIG REQUIRED)
 find_package(glad       CONFIG REQUIRED)
-find_package(RapidJSON  CONFIG REQUIRED)
 
 # ==============================================================================
 # [SECTION 2] Source Files Collection
@@ -21,7 +20,6 @@ add_library(AlphaWindow STATIC ${AW_SOURCES})
 target_include_directories(AlphaWindow
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-            ${RAPIDJSON_INCLUDE_DIRS}
 )
 
 # ==============================================================================
@@ -31,4 +29,5 @@ target_link_libraries(AlphaWindow
     PUBLIC
         glfw
         glad::glad      # Window.cpp에서 glViewport 사용
+        AlphaUtil       # rapidjson 헤더 포함
 )
