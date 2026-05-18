@@ -1,0 +1,136 @@
+#version 430 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// Output image (binding=0, written by this shader, read by FullscreenQuad)
+layout(rgba32f, binding = 0) uniform image2D u_Output;
+
+// Camera data (binding=2, uploaded by BufferManager from CameraProxy)
+layout(std430, binding = 2) readonly buffer CameraBlock
+{
+    mat4 view;
+    mat4 projection;
+    mat4 invView;
+    mat4 invProjection;
+    vec4 camPos;       // xyz = world position
+} Camera;
+
+// Light data (binding=3, uploaded by BufferManager from LightProxy[])
+struct LightProxy
+{
+    vec4 position;    // xyz=pos,  w=type (0=dir,1=point,2=spot)
+    vec4 direction;   // xyz=dir,  w=intensity
+    vec4 color;       // rgb=color, w=unused
+    vec4 attenuation; // x=constant, y=linear, z=quadratic, w=unused
+    vec4 spotParams;  // x=cosInner, y=cosOuter, zw=unused
+};
+layout(std430, binding = 3) readonly buffer LightBlock
+{
+    LightProxy lights[];
+} Lights;
+
+// ---------------------------------------------------------------------------
+// Minimal sphere scene (developer-defined — replace with your own geometry)
+// ---------------------------------------------------------------------------
+
+struct Sphere { vec3 center; float radius; vec3 color; float roughness; };
+
+const int NUM_SPHERES = 4;
+Sphere spheres[NUM_SPHERES];
+
+void InitScene()
+{
+    spheres[0] = Sphere(vec3( 0.0,  0.0, -3.0), 0.5, vec3(0.8, 0.2, 0.2), 0.0);
+    spheres[1] = Sphere(vec3( 1.2,  0.0, -3.0), 0.5, vec3(0.2, 0.8, 0.2), 0.3);
+    spheres[2] = Sphere(vec3(-1.2,  0.0, -3.0), 0.5, vec3(0.2, 0.2, 0.8), 0.6);
+    spheres[3] = Sphere(vec3( 0.0, -100.5, -3.0), 100.0, vec3(0.7, 0.7, 0.7), 0.8);
+}
+
+// ---------------------------------------------------------------------------
+// Ray-sphere intersection
+// ---------------------------------------------------------------------------
+
+struct Ray { vec3 origin; vec3 dir; };
+
+float HitSphere(Sphere s, Ray r)
+{
+    vec3  oc = r.origin - s.center;
+    float a  = dot(r.dir, r.dir);
+    float b  = 2.0 * dot(oc, r.dir);
+    float c  = dot(oc, oc) - s.radius * s.radius;
+    float d  = b * b - 4.0 * a * c;
+    if (d < 0.0) return -1.0;
+    return (-b - sqrt(d)) / (2.0 * a);
+}
+
+// ---------------------------------------------------------------------------
+// Shading — simple diffuse + first directional light
+// ---------------------------------------------------------------------------
+
+vec3 Shade(vec3 hitPos, vec3 normal, vec3 albedo)
+{
+    vec3 ambient = albedo * 0.1;
+    vec3 result  = ambient;
+
+    // Use the first light from the SSBO (if any)
+    uint numLights = uint(Lights.lights.length());
+    if (numLights > 0u)
+    {
+        LightProxy L   = Lights.lights[0];
+        vec3 lightDir  = -normalize(L.direction.xyz);
+        float intensity = L.direction.w;
+        vec3  lightColor = L.color.rgb * intensity;
+        float diff = max(dot(normal, lightDir), 0.0);
+        result += albedo * lightColor * diff;
+    }
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size  = imageSize(u_Output);
+    if (pixel.x >= size.x || pixel.y >= size.y) return;
+
+    InitScene();
+
+    // Reconstruct ray from camera matrices
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    vec2 ndc = uv * 2.0 - 1.0;
+
+    vec4 rayClip  = vec4(ndc, -1.0, 1.0);
+    vec4 rayView  = Camera.invProjection * rayClip;
+    rayView       = vec4(rayView.xy, -1.0, 0.0);
+    vec3 rayWorld = normalize((Camera.invView * rayView).xyz);
+
+    Ray ray;
+    ray.origin = Camera.camPos.xyz;
+    ray.dir    = rayWorld;
+
+    // Find closest sphere hit
+    float  tMin    = 1e20;
+    int    hitIdx  = -1;
+    for (int i = 0; i < NUM_SPHERES; i++)
+    {
+        float t = HitSphere(spheres[i], ray);
+        if (t > 0.001 && t < tMin)
+        {
+            tMin   = t;
+            hitIdx = i;
+        }
+    }
+
+    vec3 color = vec3(0.05, 0.05, 0.1); // background
+    if (hitIdx >= 0)
+    {
+        vec3 hitPos = ray.origin + tMin * ray.dir;
+        vec3 normal = normalize(hitPos - spheres[hitIdx].center);
+        color = Shade(hitPos, normal, spheres[hitIdx].color);
+    }
+
+    imageStore(u_Output, pixel, vec4(color, 1.0));
+}

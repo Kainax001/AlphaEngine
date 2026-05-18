@@ -1,5 +1,6 @@
 #include "AlphaScene/MeshComponent.h"
 #include "AlphaScene/Actor.h"
+#include <glm/gtc/matrix_inverse.hpp>
 
 namespace AS {
 
@@ -144,6 +145,20 @@ void MeshComponent::Deserialize(const rapidjson::Value& in)
     }
     if (in.HasMember("shaderName") && in["shaderName"].IsString())
         SetShaderName(in["shaderName"].GetString());
+}
+
+AG::MeshProxy MeshComponent::ToProxy() const
+{
+    AG::MeshProxy proxy{};
+    glm::mat4 model = m_Owner->GetTransform().GetModelMatrix();
+    proxy.modelMatrix  = model;
+    proxy.normalMatrix = glm::mat4(glm::inverseTranspose(glm::mat3(model)));
+
+    // Approximate AABB as a sphere centered on the actor's world position.
+    glm::vec3 pos = m_Owner->GetTransform().GetPosition();
+    proxy.boundsCenter = glm::vec4(pos, 1.0f); // w = radius placeholder
+
+    return proxy;
 }
 
 } // namespace AS

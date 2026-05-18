@@ -30,6 +30,8 @@ public:
 
     void Render(const RenderContext& ctx);
 
+    AG::MeshProxy ToProxy() const;
+
     const std::shared_ptr<AG::Model>& GetModel() const { return m_Model; }
 
     const char*     GetTypeName()  const override { return "MeshComponent"; }

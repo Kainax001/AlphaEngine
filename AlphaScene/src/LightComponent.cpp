@@ -1,5 +1,6 @@
 #include "AlphaScene/LightComponent.h"
 #include "AlphaScene/Actor.h"
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace AS {
 
@@ -153,6 +154,50 @@ void LightComponent::Deserialize(const rapidjson::Value& in)
         sl->SetOuterCutOff(outerCutOff);
         m_Light = std::move(sl);
     }
+}
+
+AG::LightProxy LightComponent::ToProxy() const
+{
+    AG::LightProxy proxy{};
+    if (!m_Light) return proxy;
+
+    glm::vec3 color     = m_Light->GetColor();
+    float     intensity = m_Light->GetIntensity();
+    proxy.color = glm::vec4(color, 0.0f);
+
+    switch (m_Light->GetType())
+    {
+        case AG::LightType::Directional:
+        {
+            auto* dl = static_cast<AG::DirectionalLight*>(m_Light.get());
+            proxy.position  = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // type=0
+            proxy.direction = glm::vec4(dl->GetDirection(), intensity);
+            break;
+        }
+        case AG::LightType::Point:
+        {
+            auto* pl = static_cast<AG::PointLight*>(m_Light.get());
+            glm::vec3 pos   = m_Owner->GetTransform().GetPosition();
+            proxy.position  = glm::vec4(pos, 1.0f); // type=1
+            proxy.direction = glm::vec4(0.0f, 0.0f, 0.0f, intensity);
+            proxy.attenuation = glm::vec4(
+                pl->GetConstant(), pl->GetLinear(), pl->GetQuadratic(), 0.0f);
+            break;
+        }
+        case AG::LightType::Spot:
+        {
+            auto* sl = static_cast<AG::SpotLight*>(m_Light.get());
+            glm::vec3 pos   = m_Owner->GetTransform().GetPosition();
+            proxy.position  = glm::vec4(pos, 2.0f); // type=2
+            proxy.direction = glm::vec4(sl->GetDirection(), intensity);
+            float cosInner  = glm::cos(glm::radians(sl->GetCutOff()));
+            float cosOuter  = glm::cos(glm::radians(sl->GetOuterCutOff()));
+            proxy.spotParams = glm::vec4(cosInner, cosOuter, 0.0f, 0.0f);
+            break;
+        }
+    }
+
+    return proxy;
 }
 
 } // namespace AS

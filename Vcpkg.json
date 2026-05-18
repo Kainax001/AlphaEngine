@@ -7,7 +7,7 @@
     {
       "name": "glad",
       "features": [
-        "gl-api-33",
+        "gl-api-46",
         "loader"
       ]
     },

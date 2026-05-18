@@ -11,6 +11,12 @@ namespace AC { class Input; }
 
 namespace AS {
 
+enum class RenderMode {
+    Rasterization,  // default: existing 3-stage forward pipeline
+    RayTracing,     // compute shader only, fullscreen blit
+    Hybrid,         // rasterization + RT pass (future)
+};
+
 class World {
 public:
     World();
@@ -33,13 +39,26 @@ public:
     float GetFixedDT()    const { return m_FixedDT; }
     void  SetFixedDT(float dt)  { m_FixedDT = dt; }
 
-    // Shared UBO — World owns, all MeshComponents receive reference automatically in Render().
+    // Shared UBO — World owns, all MeshComponents receive reference automatically.
     AG::UBO* CreateSharedUBO(const std::string& blockName, GLsizeiptr size, GLuint binding);
     AG::UBO* GetSharedUBO   (const std::string& blockName) const;
 
     // Activate the standard 3-light (Dir/Point/Spot) UBO system.
-    // World::Render() will gather LightComponents and pack them into "LightBlock" each frame.
     void EnableDefaultLighting(GLuint binding = 1);
+
+    // Ray Tracing
+    // computePath: path to a .comp file
+    // width/height: output image resolution
+    void EnableRayTracing(const std::string& computePath,
+                          int width, int height,
+                          RenderMode mode = RenderMode::RayTracing);
+    void DisableRayTracing();
+    bool IsRayTracingEnabled() const { return m_RenderMode != RenderMode::Rasterization; }
+    RenderMode GetRenderMode() const { return m_RenderMode; }
+
+    // Register a developer-owned SSBO with the BufferManager.
+    AG::SSBO* CreateRayTracingSSBO(const std::string& name,
+                                   GLsizeiptr size, GLuint binding);
 
     // Serialization
     bool SaveScene (const std::string& path) const;
@@ -48,18 +67,19 @@ public:
 private:
     void FlushPendingActors();
     void UpdateDefaultLightingUBO(const RenderContext& ctx);
+    AG::SceneProxy CollectSceneProxy() const;
 
     // std140 layout matching Lit.frag LightBlock
     struct LightUBOData {
-        glm::vec4 dirDirection;     // xyz = dir,   w = intensity
-        glm::vec4 dirColor;         // xyz = color, w = 0
-        glm::vec4 pointPosition;    // xyz = pos,   w = intensity
-        glm::vec4 pointColor;       // xyz = color, w = constant
-        glm::vec4 pointAttenuation; // x = linear,  y = quad, zw = 0
-        glm::vec4 spotPosition;     // xyz = pos,   w = intensity
-        glm::vec4 spotDirection;    // xyz = dir,   w = cutOff(cos)
-        glm::vec4 spotColor;        // xyz = color, w = outerCutOff(cos)
-        glm::vec4 spotAttenuation;  // x = linear,  y = quad, z = constant, w = 0
+        glm::vec4 dirDirection;
+        glm::vec4 dirColor;
+        glm::vec4 pointPosition;
+        glm::vec4 pointColor;
+        glm::vec4 pointAttenuation;
+        glm::vec4 spotPosition;
+        glm::vec4 spotDirection;
+        glm::vec4 spotColor;
+        glm::vec4 spotAttenuation;
     };
 
     struct SharedUBOEntry {
@@ -79,6 +99,20 @@ private:
     float m_TimeScale  = 1.0f;
     float m_FixedDT    = 1.0f / 60.0f;
     float m_FixedAccum = 0.0f;
+
+    // Ray tracing state
+    RenderMode m_RenderMode = RenderMode::Rasterization;
+
+    std::unique_ptr<AG::ComputeShader>  m_ComputeShader;
+    std::unique_ptr<AG::BufferManager>  m_BufferManager;
+    std::unique_ptr<AG::FullscreenQuad> m_FullscreenQuad;
+
+    GLuint m_RTOutputTexture = 0;
+    int    m_RTWidth         = 0;
+    int    m_RTHeight        = 0;
+
+    // Developer-owned SSBOs registered via CreateRayTracingSSBO
+    std::vector<std::unique_ptr<AG::SSBO>> m_OwnedRTSSBOs;
 };
 
 } // namespace AS

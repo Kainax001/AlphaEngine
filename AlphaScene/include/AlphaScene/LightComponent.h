@@ -11,7 +11,8 @@ public:
     explicit LightComponent(Actor* owner);                                    // for ComponentRegistry
     LightComponent(Actor* owner, std::shared_ptr<AG::Light> light);
 
-    LightData  GetLightData() const;
+    LightData      GetLightData() const;
+    AG::LightProxy ToProxy()     const;
     AG::Light* GetLight()     const { return m_Light.get(); }
 
     void SetLight(std::shared_ptr<AG::Light> light) { m_Light = std::move(light); }

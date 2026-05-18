@@ -22,6 +22,8 @@ public:
     const AG::Camera& GetCamera() const { return m_Camera; }
           AG::Camera& GetCamera()       { return m_Camera; }
 
+    AG::CameraProxy ToProxy() const;
+
     const char*     GetTypeName()  const override { return "CameraComponent"; }
     std::type_index GetTypeIndex() const override { return typeid(CameraComponent); }
     void Serialize  (rapidjson::Value& out,

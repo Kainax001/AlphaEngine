@@ -26,7 +26,16 @@ World::World()
         registered = true;
     }
 }
-World::~World() { EndPlay(); }
+World::~World()
+{
+    // Release RT texture before EndPlay clears actors.
+    if (m_RTOutputTexture != 0)
+    {
+        glDeleteTextures(1, &m_RTOutputTexture);
+        m_RTOutputTexture = 0;
+    }
+    EndPlay();
+}
 
 // ---------------------------------------------------------------------------
 // Actor management
@@ -172,11 +181,78 @@ void World::Tick(float dt)
         actor->Tick(scaledDt);
 }
 
+AG::SceneProxy World::CollectSceneProxy() const
+{
+    AG::SceneProxy proxy;
+    for (const auto& actor : m_Actors)
+    {
+        if (!actor->IsActive()) continue;
+        if (auto* cam = actor->GetComponent<CameraComponent>())
+            proxy.camera = cam->ToProxy();
+        if (auto* light = actor->GetComponent<LightComponent>())
+            proxy.lights.push_back(light->ToProxy());
+        if (auto* mesh = actor->GetComponent<MeshComponent>())
+            proxy.meshes.push_back(mesh->ToProxy());
+    }
+    return proxy;
+}
+
+void World::EnableRayTracing(const std::string& computePath,
+                              int width, int height, RenderMode mode)
+{
+    m_RenderMode = mode;
+    m_RTWidth    = width;
+    m_RTHeight   = height;
+
+    m_ComputeShader  = std::make_unique<AG::ComputeShader>(computePath);
+    m_BufferManager  = std::make_unique<AG::BufferManager>();
+    m_FullscreenQuad = std::make_unique<AG::FullscreenQuad>();
+
+    // Create GL_RGBA32F output texture
+    if (m_RTOutputTexture != 0)
+        glDeleteTextures(1, &m_RTOutputTexture);
+
+    glGenTextures(1, &m_RTOutputTexture);
+    glBindTexture(GL_TEXTURE_2D, m_RTOutputTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height,
+                 0, GL_RGBA, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    std::cout << "[World] Ray tracing enabled: " << computePath
+              << " (" << width << "x" << height << ")\n";
+}
+
+void World::DisableRayTracing()
+{
+    m_RenderMode = RenderMode::Rasterization;
+    m_ComputeShader.reset();
+    m_BufferManager.reset();
+    m_FullscreenQuad.reset();
+
+    if (m_RTOutputTexture != 0)
+    {
+        glDeleteTextures(1, &m_RTOutputTexture);
+        m_RTOutputTexture = 0;
+    }
+}
+
+AG::SSBO* World::CreateRayTracingSSBO(const std::string& name,
+                                       GLsizeiptr size, GLuint binding)
+{
+    auto ssbo = std::make_unique<AG::SSBO>(size, binding);
+    AG::SSBO* ptr = ssbo.get();
+    if (m_BufferManager) m_BufferManager->RegisterSSBO(name, ptr);
+    m_OwnedRTSSBOs.push_back(std::move(ssbo));
+    return ptr;
+}
+
 void World::Render()
 {
     RenderContext ctx;
 
-    // Stage 1: Gather camera + lights
+    // Stage 1: Gather camera + lights (also collect proxy for RT)
     for (auto& actor : m_Actors)
     {
         if (!actor->IsActive()) continue;
@@ -192,21 +268,54 @@ void World::Render()
             ctx.lights.push_back(light->GetLightData());
     }
 
-    // Stage 2: Update default lighting UBO (if enabled)
+    // Stage 2a: Update default lighting UBO (rasterization)
     if (m_DefaultLightingEnabled)
         UpdateDefaultLightingUBO(ctx);
 
-    // Stage 3: Draw meshes — auto-register all SharedUBOs
-    for (auto& actor : m_Actors)
+    // Stage 2b: Update BufferManager SSBOs (ray tracing)
+    if (m_RenderMode != RenderMode::Rasterization && m_BufferManager)
     {
-        if (!actor->IsActive()) continue;
-        if (auto* mesh = actor->GetComponent<MeshComponent>())
-        {
-            for (const auto& [blockName, entry] : m_SharedUBOs)
-                mesh->RegisterUBO(blockName, entry.ubo.get(), entry.binding);
+        AG::SceneProxy proxy = CollectSceneProxy();
+        m_BufferManager->Update(proxy);
+    }
 
-            mesh->Render(ctx);
+    // Stage 3a: Rasterization pass
+    if (m_RenderMode == RenderMode::Rasterization ||
+        m_RenderMode == RenderMode::Hybrid)
+    {
+        for (auto& actor : m_Actors)
+        {
+            if (!actor->IsActive()) continue;
+            if (auto* mesh = actor->GetComponent<MeshComponent>())
+            {
+                for (const auto& [blockName, entry] : m_SharedUBOs)
+                    mesh->RegisterUBO(blockName, entry.ubo.get(), entry.binding);
+                mesh->Render(ctx);
+            }
         }
+    }
+
+    // Stage 3b: Ray tracing pass
+    if ((m_RenderMode == RenderMode::RayTracing ||
+         m_RenderMode == RenderMode::Hybrid)
+        && m_ComputeShader && m_ComputeShader->IsValid()
+        && m_RTOutputTexture != 0)
+    {
+        m_BufferManager->BindAll();
+
+        glBindImageTexture(0, m_RTOutputTexture, 0, GL_FALSE, 0,
+                           GL_WRITE_ONLY, GL_RGBA32F);
+
+        m_ComputeShader->Use();
+        m_ComputeShader->Dispatch(
+            static_cast<GLuint>((m_RTWidth  + 15) / 16),
+            static_cast<GLuint>((m_RTHeight + 15) / 16));
+        m_ComputeShader->MemoryBarrier();
+
+        m_BufferManager->UnbindAll();
+
+        if (m_FullscreenQuad)
+            m_FullscreenQuad->Draw(m_RTOutputTexture);
     }
 }
 
@@ -219,6 +328,7 @@ void World::EndPlay()
     m_PendingRemove.clear();
     m_SharedUBOs.clear();
     m_DefaultLightingEnabled = false;
+    m_OwnedRTSSBOs.clear();
 }
 
 // ---------------------------------------------------------------------------

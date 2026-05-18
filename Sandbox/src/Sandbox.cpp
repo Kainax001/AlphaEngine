@@ -21,5 +21,12 @@ void Sandbox::OnWorldInit(AS::World* world)
         ->AddComponent<OrbitComponent>(4.0f, 1.2f, 3.0f);
 
     world->SaveScene(SANDBOX_ASSET_DIR "scenes/main.json");
+
+    // Enable ray tracing (comment out to use rasterization)
+    world->EnableRayTracing(
+        SANDBOX_ASSET_DIR "shaders/Raytracer.comp",
+        1280, 720,
+        AS::RenderMode::RayTracing
+    );
 }
 

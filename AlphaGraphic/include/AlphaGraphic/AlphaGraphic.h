@@ -5,12 +5,16 @@
 // Core
 #include "AlphaGraphic/core/Renderer.h"
 #include "AlphaGraphic/core/Framebuffer.h"
+#include "AlphaGraphic/core/RenderProxy.h"
+#include "AlphaGraphic/core/BufferManager.h"
+#include "AlphaGraphic/core/FullscreenQuad.h"
 
 // Buffer
 #include "AlphaGraphic/buffer/VAO.h"
 #include "AlphaGraphic/buffer/VBO.h"
 #include "AlphaGraphic/buffer/EBO.h"
 #include "AlphaGraphic/buffer/UBO.h"
+#include "AlphaGraphic/buffer/SSBO.h"
 #include "AlphaGraphic/buffer/FBO.h"
 
 // Shader

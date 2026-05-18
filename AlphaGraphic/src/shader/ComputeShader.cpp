@@ -3,72 +3,148 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <glm/gtc/type_ptr.hpp>
 
 namespace AG {
 
-ComputeShader::ComputeShader(const char* computePath)
+ComputeShader::ComputeShader(const std::string& computePath)
 {
-    // std::string   computeCode;
-    // std::ifstream cShaderFile;
+    Compile(computePath);
+}
 
-    // cShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+ComputeShader::~ComputeShader()
+{
+    if (m_ID != 0)
+        glDeleteProgram(m_ID);
+}
 
-    // try
-    // {
-    //     cShaderFile.open(computePath);
-    //     std::stringstream cShaderStream;
-    //     cShaderStream << cShaderFile.rdbuf();
-    //     cShaderFile.close();
-    //     computeCode = cShaderStream.str();
-    // }
-    // catch (std::ifstream::failure& e)
-    // {
-    //     std::cerr << "[AlphaGraphic] ERROR::COMPUTE_SHADER::FILE_NOT_SUCCESSFULLY_READ: " << e.what() << "\n";
-    // }
+bool ComputeShader::Reload()
+{
+    if (m_Path.empty()) return false;
+    if (m_ID != 0)
+    {
+        glDeleteProgram(m_ID);
+        m_ID = 0;
+    }
+    return Compile(m_Path);
+}
 
-    // const char* cShaderCode = computeCode.c_str();
+bool ComputeShader::Compile(const std::string& path)
+{
+    m_Path = path;
 
-    // unsigned int compute = glCreateShader(GL_COMPUTE_SHADER);
-    // glShaderSource(compute, 1, &cShaderCode, NULL);
-    // glCompileShader(compute);
-    // checkCompileErrors(compute, "COMPUTE");
+    std::string   code;
+    std::ifstream file;
+    file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
-    // ID = glCreateProgram();
-    // glAttachShader(ID, compute);
-    // glLinkProgram(ID);
-    // checkCompileErrors(ID, "PROGRAM");
+    try
+    {
+        file.open(path);
+        std::stringstream ss;
+        ss << file.rdbuf();
+        file.close();
+        code = ss.str();
+    }
+    catch (const std::ifstream::failure&)
+    {
+        std::cerr << "[ComputeShader] Cannot open: " << path << "\n";
+        return false;
+    }
 
-    // glDeleteShader(compute);
+    const char* src = code.c_str();
 
-    std::cerr << "[AlphaGraphic] ComputeShader: OpenGL 4.3 needed\n";
+    GLuint shader = glCreateShader(GL_COMPUTE_SHADER);
+    glShaderSource(shader, 1, &src, nullptr);
+    glCompileShader(shader);
+    CheckErrors(shader, "COMPUTE");
+
+    GLint ok = 0;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok)
+    {
+        glDeleteShader(shader);
+        return false;
+    }
+
+    m_ID = glCreateProgram();
+    glAttachShader(m_ID, shader);
+    glLinkProgram(m_ID);
+    CheckErrors(m_ID, "PROGRAM");
+
+    GLint linked = 0;
+    glGetProgramiv(m_ID, GL_LINK_STATUS, &linked);
+    glDeleteShader(shader);
+
+    if (!linked)
+    {
+        glDeleteProgram(m_ID);
+        m_ID = 0;
+        return false;
+    }
+
+    std::cout << "[ComputeShader] Loaded: " << path << "\n";
+    return true;
 }
 
 void ComputeShader::Use() const
 {
-    // glUseProgram(ID);
+    glUseProgram(m_ID);
 }
 
-void ComputeShader::Dispatch(unsigned int x, unsigned int y, unsigned int z) const
+void ComputeShader::Dispatch(GLuint x, GLuint y, GLuint z) const
 {
-    // glDispatchCompute(x, y, z);
-    // glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    glDispatchCompute(x, y, z);
+}
+
+void ComputeShader::MemoryBarrier(GLbitfield barriers) const
+{
+    glMemoryBarrier(barriers);
 }
 
 void ComputeShader::SetInt(const std::string& name, int value) const
 {
-    // glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
+    glUniform1i(glGetUniformLocation(m_ID, name.c_str()), value);
 }
 
 void ComputeShader::SetFloat(const std::string& name, float value) const
 {
-    // glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
+    glUniform1f(glGetUniformLocation(m_ID, name.c_str()), value);
 }
 
-void ComputeShader::checkCompileErrors(unsigned int shader, const std::string& type)
+void ComputeShader::SetVec2(const std::string& name, const glm::vec2& v) const
 {
-    // GLint  success;
-    // GLchar infoLog[1024];
-    // ...
+    glUniform2fv(glGetUniformLocation(m_ID, name.c_str()), 1, glm::value_ptr(v));
+}
+
+void ComputeShader::SetVec3(const std::string& name, const glm::vec3& v) const
+{
+    glUniform3fv(glGetUniformLocation(m_ID, name.c_str()), 1, glm::value_ptr(v));
+}
+
+void ComputeShader::CheckErrors(GLuint id, const std::string& type) const
+{
+    GLint  success = 0;
+    GLchar log[1024];
+
+    if (type != "PROGRAM")
+    {
+        glGetShaderiv(id, GL_COMPILE_STATUS, &success);
+        if (!success)
+        {
+            glGetShaderInfoLog(id, 1024, nullptr, log);
+            std::cerr << "[ComputeShader] Compile error (" << type << "):\n"
+                      << log << "\n";
+        }
+    }
+    else
+    {
+        glGetProgramiv(id, GL_LINK_STATUS, &success);
+        if (!success)
+        {
+            glGetProgramInfoLog(id, 1024, nullptr, log);
+            std::cerr << "[ComputeShader] Link error:\n" << log << "\n";
+        }
+    }
 }
 
 } // namespace AG

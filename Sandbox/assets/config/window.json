@@ -6,6 +6,6 @@
     "fullscreen":     false,
     "capture_cursor": true,
     "resizable":      true,
-    "gl_major":       3,
+    "gl_major":       4,
     "gl_minor":       3
 }

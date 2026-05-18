@@ -1,6 +1,7 @@
 #include "AlphaScene/CameraComponent.h"
 #include "AlphaScene/InputComponent.h"
 #include "AlphaScene/Actor.h"
+#include <glm/gtc/matrix_inverse.hpp>
 
 namespace AS {
 
@@ -62,6 +63,17 @@ void CameraComponent::Deserialize(const rapidjson::Value& in)
 {
     if (in.HasMember("speed") && in["speed"].IsNumber())
         m_Camera.SetSpeed(in["speed"].GetFloat());
+}
+
+AG::CameraProxy CameraComponent::ToProxy() const
+{
+    AG::CameraProxy proxy;
+    proxy.view           = GetViewMatrix();
+    proxy.projection     = GetProjectionMatrix(m_Aspect);
+    proxy.invView        = glm::inverse(proxy.view);
+    proxy.invProjection  = glm::inverse(proxy.projection);
+    proxy.position       = glm::vec4(m_Camera.GetPosition(), 1.0f);
+    return proxy;
 }
 
 } // namespace AS
